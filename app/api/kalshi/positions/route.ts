@@ -19,4 +19,6 @@ export async function GET() {
     const positions = await getPositions(safeDecrypt(meta.kalshiApiKey))
     return NextResponse.json({ positions })
   } catch (err: any) {
-    return NextRespo
+    return NextResponse.json({ error: err.message }, { status: 502 })
+  }
+}

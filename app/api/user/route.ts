@@ -1,7 +1,7 @@
 import { auth, clerkClient } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { getGitHubUser } from '@/lib/github'
-import { encrypt, safeDecrypt } from '@/lib/crypto'
+import { encrypt } from '@/lib/crypto'
 
 export async function GET() {
   const { userId } = await auth()
@@ -30,12 +30,10 @@ export async function POST(request: Request) {
   const update: Record<string, string> = {}
 
   if (body.kalshiApiKey) {
-    // Encrypt before storing in Clerk
     update.kalshiApiKey = encrypt(body.kalshiApiKey.trim())
   }
 
   if (body.githubPat) {
-    // Validate the PAT works before storing it
     try {
       const login = await getGitHubUser(body.githubPat)
       if (body.githubUsername && login.toLowerCase() !== body.githubUsername.toLowerCase()) {
@@ -43,7 +41,14 @@ export async function POST(request: Request) {
           error: `PAT belongs to GitHub user "${login}" but you entered "${body.githubUsername}". Use the correct username.`
         }, { status: 400 })
       }
-      // Encrypt before storing
       update.githubPat      = encrypt(body.githubPat.trim())
-      update.githubUsername = login           // username is not sensitive
-      // Use repo select
+      update.githubUsername = login
+      update.githubRepo     = body.githubRepo ?? `${login}/KalshiTradingBot`
+    } catch (err: any) {
+      return NextResponse.json({ error: `GitHub validation failed: ${err.message}` }, { status: 400 })
+    }
+  }
+
+  await clerk.users.updateUserMetadata(userId, { privateMetadata: update })
+  return NextResponse.json({ ok: true })
+}

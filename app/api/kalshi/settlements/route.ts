@@ -19,4 +19,6 @@ export async function GET() {
     const settlements = await getSettlements(safeDecrypt(meta.kalshiApiKey))
     return NextResponse.json({ settlements })
   } catch (err: any) {
-    return NextRespo
+    return NextResponse.json({ error: err.message }, { status: 502 })
+  }
+}

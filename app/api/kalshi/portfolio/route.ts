@@ -19,4 +19,6 @@ export async function GET() {
     const data = await getPortfolioBalance(safeDecrypt(meta.kalshiApiKey))
     return NextResponse.json(data)
   } catch (err: any) {
-    return NextRespo
+    return NextResponse.json({ error: err.message }, { status: 502 })
+  }
+}
