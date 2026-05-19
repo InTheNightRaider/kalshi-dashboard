@@ -59,7 +59,7 @@ export default function DashboardPage() {
     if (!kalshiKeySet) { setDataLoading(false); return }
     fetchAll()
     pollRef.current = setInterval(fetchAll, 30_000)
-    return () => clearInterval(pollRef.current)
+    return () => { if (pollRef.current) clearInterval(pollRef.current) }
   }, [fetchAll, kalshiKeySet])
 
   const handleStart = async () => {
