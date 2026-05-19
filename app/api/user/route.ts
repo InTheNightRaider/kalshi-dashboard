@@ -46,4 +46,4 @@ export async function POST(request: Request) {
       // Encrypt before storing
       update.githubPat      = encrypt(body.githubPat.trim())
       update.githubUsername = login           // username is not sensitive
-      update.githubRepo 
+      // Use repo select
