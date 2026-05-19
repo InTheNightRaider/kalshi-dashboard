@@ -1,6 +1,7 @@
 import { auth, clerkClient } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { getPositions } from '@/lib/kalshi'
+import { safeDecrypt } from '@/lib/crypto'
 
 export async function GET() {
   const { userId } = await auth()
@@ -15,9 +16,7 @@ export async function GET() {
   }
 
   try {
-    const positions = await getPositions(meta.kalshiApiKey)
+    const positions = await getPositions(safeDecrypt(meta.kalshiApiKey))
     return NextResponse.json({ positions })
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 502 })
-  }
-}
+    return NextRespo
