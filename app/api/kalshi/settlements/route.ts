@@ -1,6 +1,7 @@
 import { auth, clerkClient } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { getSettlements } from '@/lib/kalshi'
+import { safeDecrypt } from '@/lib/crypto'
 
 export async function GET() {
   const { userId } = await auth()
@@ -15,9 +16,7 @@ export async function GET() {
   }
 
   try {
-    const settlements = await getSettlements(meta.kalshiApiKey)
+    const settlements = await getSettlements(safeDecrypt(meta.kalshiApiKey))
     return NextResponse.json({ settlements })
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 502 })
-  }
-}
+    return NextRespo
