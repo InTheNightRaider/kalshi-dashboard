@@ -3,10 +3,13 @@ import crypto from 'crypto'
 const KALSHI_BASE = 'https://api.elections.kalshi.com/trade-api/v2'
 
 function signRequest(privateKeyPem: string, timestamp: number, method: string, path: string): string {
+  // Normalize line endings — browsers may submit \r\n, PEM requires \n
+  const key = privateKeyPem.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim()
   const msg = `${timestamp}${method.toUpperCase()}${path}`
-  const sign = crypto.createSign('SHA256')
+  const sign = crypto.createSign('RSA-SHA256')
   sign.update(msg)
-  return sign.sign(privateKeyPem, 'base64')
+  sign.end()
+  return sign.sign({ key, format: 'pem', type: 'pkcs1', padding: crypto.constants.RSA_PKCS1_PADDING }, 'base64')
 }
 
 async function kalshiFetch(
@@ -19,15 +22,16 @@ async function kalshiFetch(
   const url = new URL(`${KALSHI_BASE}${path}`)
   if (params) Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v))
 
-  const ts  = Date.now()
-  const sig = signRequest(privateKey, ts, method, `/trade-api/v2${path}`)
+  const ts        = Date.now()
+  const signPath  = `/trade-api/v2${path}`
+  const signature = signRequest(privateKey, ts, method, signPath)
 
   const res = await fetch(url.toString(), {
     method,
     headers: {
       'KALSHI-ACCESS-KEY':       apiKey,
       'KALSHI-ACCESS-TIMESTAMP': ts.toString(),
-      'KALSHI-ACCESS-SIGNATURE': sig,
+      'KALSHI-ACCESS-SIGNATURE': signature,
       'Accept':                  'application/json',
       'Content-Type':            'application/json',
     },
@@ -36,7 +40,7 @@ async function kalshiFetch(
 
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText)
-    throw new Error(`Kalshi ${res.status}: ${text.slice(0, 300)}`)
+    throw new Error(`Kalshi ${res.status}: ${text.slice(0, 400)}`)
   }
   return res.json()
 }
