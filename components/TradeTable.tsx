@@ -3,11 +3,6 @@ type Props = {
   type: 'open' | 'closed'
 }
 
-function fmt(val: any, decimals = 2) {
-  const n = parseFloat(val)
-  return isNaN(n) ? '—' : `$${Math.abs(n / 100).toFixed(decimals)}`
-}
-
 function shortTicker(ticker: string) {
   if (!ticker) return '—'
   const parts = ticker.split('-')
@@ -42,10 +37,14 @@ export default function TradeTable({ trades, type }: Props) {
                 </td>
                 <td className="py-3 pr-4 text-right font-mono text-white">{t.position ?? t.contracts ?? '—'}</td>
                 <td className="py-3 pr-4 text-right font-mono text-gray-300">
-                  {t.market_exposure_cents != null ? fmt(t.market_exposure_cents / (t.position || 1)) : '—'}
+                  {t.market_exposure_cents != null
+                    ? `$${Math.abs(t.market_exposure_cents / (t.position || 1) / 100).toFixed(2)}`
+                    : '—'}
                 </td>
                 <td className="py-3 text-right font-mono text-white">
-                  {t.market_exposure_cents != null ? fmt(t.market_exposure_cents) : '—'}
+                  {t.market_exposure_cents != null
+                    ? `$${Math.abs(t.market_exposure_cents / 100).toFixed(2)}`
+                    : '—'}
                 </td>
               </tr>
             ))}
@@ -56,6 +55,8 @@ export default function TradeTable({ trades, type }: Props) {
   }
 
   // Closed / settlements
+  // API fields: revenue (cents int), no_total_cost_dollars ($ string),
+  //             yes_total_cost_dollars ($ string), fee_cost ($ string)
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
@@ -63,6 +64,7 @@ export default function TradeTable({ trades, type }: Props) {
           <tr className="text-xs text-gray-500 uppercase border-b border-[#252c3a]">
             <th className="text-left py-2 pr-4 font-medium">Market</th>
             <th className="text-left py-2 pr-4 font-medium">Result</th>
+            <th className="text-right py-2 pr-4 font-medium">Cost</th>
             <th className="text-right py-2 pr-4 font-medium">Revenue</th>
             <th className="text-right py-2 font-medium">P&L</th>
           </tr>
@@ -70,9 +72,11 @@ export default function TradeTable({ trades, type }: Props) {
         <tbody className="divide-y divide-[#1e2330]">
           {trades.slice(0, 50).map((t, i) => {
             const revenue = (t.revenue ?? 0) / 100
-            const cost    = ((t.no_cost ?? 0) + (t.yes_cost ?? 0)) / 100
+            const cost    = parseFloat(t.no_total_cost_dollars  ?? '0')
+                          + parseFloat(t.yes_total_cost_dollars ?? '0')
+                          + parseFloat(t.fee_cost               ?? '0')
             const pnl     = revenue - cost
-            const won     = pnl > 0
+            const won     = revenue > 0
             return (
               <tr key={i} className="hover:bg-[#1e2330]/50 transition-colors">
                 <td className="py-3 pr-4">
@@ -82,8 +86,13 @@ export default function TradeTable({ trades, type }: Props) {
                 <td className="py-3 pr-4">
                   <span className={won ? 'badge-green' : 'badge-red'}>{won ? 'WIN' : 'LOSS'}</span>
                 </td>
-                <td className="py-3 pr-4 text-right font-mono text-gray-300">${revenue.toFixed(2)}</td>
-                <td className={`py-3 text-right font-mono font-medium ${won ? 'text-[#00d17a]' : 'text-[#ff4d6d]'}`}>
+                <td className="py-3 pr-4 text-right font-mono text-gray-400">
+                  ${cost.toFixed(2)}
+                </td>
+                <td className="py-3 pr-4 text-right font-mono text-gray-300">
+                  ${revenue.toFixed(2)}
+                </td>
+                <td className={`py-3 text-right font-mono font-medium ${pnl >= 0 ? 'text-[#00d17a]' : 'text-[#ff4d6d]'}`}>
                   {pnl >= 0 ? '+' : ''}{pnl.toFixed(2)}
                 </td>
               </tr>
