@@ -1,6 +1,7 @@
 import { auth, clerkClient } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { getLatestWorkflowRun, cancelWorkflowRun } from '@/lib/github'
+import { safeDecrypt } from '@/lib/crypto'
 
 export async function POST() {
   const { userId } = await auth()
@@ -10,21 +11,19 @@ export async function POST() {
   const user  = await clerk.users.getUser(userId)
   const meta  = user.privateMetadata as Record<string, string>
 
-  if (!meta.githubPat || !meta.githubUsername) {
+  if (!meta.githubPat || !meta.githubUsername)
     return NextResponse.json({ error: 'GitHub not connected.' }, { status: 400 })
-  }
 
-  const [owner, repo] = meta.githubRepo.split('/')
+  const pat          = safeDecrypt(meta.githubPat)
+  const [owner, repo] = (meta.githubRepo ?? '').split('/')
 
   try {
-    const run = await getLatestWorkflowRun(meta.githubPat, owner, repo)
-    if (!run) {
+    const run = await getLatestWorkflowRun(pat, owner, repo)
+    if (!run)
       return NextResponse.json({ ok: true, message: 'No active run found.' })
-    }
-    if (run.status === 'completed') {
+    if (run.status === 'completed')
       return NextResponse.json({ ok: true, message: 'Bot is already stopped.' })
-    }
-    await cancelWorkflowRun(meta.githubPat, owner, repo, run.id)
+    await cancelWorkflowRun(pat, owner, repo, run.id)
     return NextResponse.json({ ok: true })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 502 })
