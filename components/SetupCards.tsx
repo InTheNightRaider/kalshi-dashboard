@@ -56,7 +56,7 @@ function KalshiCard({ onSaved }: { onSaved: () => void }) {
           <label className="text-xs text-gray-400 mb-1 block">API Key</label>
           <input
             type="password"
-            placeholder="e.g. e2475509-4a0c-4beb-9d45-be55a920d057"
+            placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
             value={apiKey}
             onChange={e => setApiKey(e.target.value)}
             required
