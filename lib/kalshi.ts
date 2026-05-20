@@ -3,7 +3,6 @@ import crypto from 'crypto'
 const KALSHI_BASE = 'https://api.elections.kalshi.com/trade-api/v2'
 
 function signRequest(privateKeyPem: string, timestamp: number, method: string, path: string): string {
-  // Normalize line endings — browsers may submit \r\n, PEM requires \n
   const key = privateKeyPem.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim()
   const msg = `${timestamp}${method.toUpperCase()}${path}`
   const sign = crypto.createSign('SHA256')
@@ -46,11 +45,11 @@ async function kalshiFetch(
 }
 
 export async function getPortfolioBalance(apiKey: string, privateKey: string) {
+  // API returns: { balance: <cents>, portfolio_value: <cents>, ... }
   const data = await kalshiFetch('/portfolio/balance', apiKey, privateKey)
-  const bal  = data.balance ?? data
   return {
-    available_balance: (bal.available_balance ?? 0) / 100,
-    portfolio_value:   (bal.portfolio_value   ?? 0) / 100,
+    available_balance: (data.balance         ?? 0) / 100,
+    portfolio_value:   (data.portfolio_value ?? 0) / 100,
   }
 }
 
