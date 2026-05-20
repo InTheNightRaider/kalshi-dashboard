@@ -28,10 +28,11 @@ export default function DashboardPage() {
   const [dataLoading, setDataLoading] = useState(true)
 
   // ── Bot / UI state ───────────────────────────────────────────────────────────
-  const [botStatus,      setBotStatus]      = useState<BotStatus>('idle')
-  const [modal,          setModal]          = useState<{ type: 'success' | 'error'; message: string } | null>(null)
-  const [settingsOpen,   setSettingsOpen]   = useState(false)
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [botStatus,    setBotStatus]    = useState<BotStatus>('idle')
+  const [modal,        setModal]        = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const pollRef    = useRef<ReturnType<typeof setInterval> | null>(null)
+  const botPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // ── Fetch setup status ───────────────────────────────────────────────────────
   const fetchSetup = useCallback(async () => {
@@ -48,6 +49,26 @@ export default function DashboardPage() {
   }, [])
 
   useEffect(() => { fetchSetup() }, [fetchSetup])
+
+  // ── Check real bot status from GitHub Actions on load + poll ─────────────────
+  const fetchBotStatus = useCallback(async () => {
+    try {
+      const res  = await fetch('/api/bot/status')
+      const data = await res.json()
+      // Only update if we're not mid-transition (starting/stopping)
+      setBotStatus(prev => {
+        if (prev === 'starting' || prev === 'stopping') return prev
+        return data.running ? 'running' : 'idle'
+      })
+    } catch { /* keep current status */ }
+  }, [])
+
+  // Poll GitHub Actions status every 15s to keep button accurate
+  useEffect(() => {
+    fetchBotStatus()
+    botPollRef.current = setInterval(fetchBotStatus, 15_000)
+    return () => { if (botPollRef.current) clearInterval(botPollRef.current) }
+  }, [fetchBotStatus])
 
   // ── Fetch Kalshi data ────────────────────────────────────────────────────────
   const fetchAll = useCallback(async () => {
@@ -105,14 +126,12 @@ export default function DashboardPage() {
   }
 
   // ── Derived stats ────────────────────────────────────────────────────────────
-  // Win = settled contract paid out (revenue > 0)
   const settleWins   = settlements.filter(s => (s.revenue ?? 0) > 0).length
   const settleLosses = settlements.length - settleWins
   const winRate      = settlements.length > 0
     ? ((settleWins / settlements.length) * 100).toFixed(1)
     : '0.0'
 
-  // Actual P&L = payout (cents→$) minus cost ($ strings) minus fees ($ string)
   const totalPnl = settlements.reduce((sum, s) => {
     const revenue = (s.revenue ?? 0) / 100
     const cost    = parseFloat(s.no_total_cost_dollars  ?? '0')
@@ -123,8 +142,7 @@ export default function DashboardPage() {
 
   const availableBalance = portfolio?.available_balance ?? 0
   const portfolioValue   = portfolio?.portfolio_value   ?? 0
-
-  const setupDone = kalshiKeySet && githubConnected
+  const setupDone        = kalshiKeySet && githubConnected
 
   // ── Status badge ─────────────────────────────────────────────────────────────
   const statusColor = {
@@ -141,7 +159,6 @@ export default function DashboardPage() {
     stopping: '◌ STOPPING',
   }[botStatus]
 
-  // ── Loading skeleton ──────────────────────────────────────────────────────────
   if (!isLoaded || setupLoading) {
     return (
       <div className="min-h-screen bg-[#0a0b0d] flex items-center justify-center">
@@ -186,13 +203,12 @@ export default function DashboardPage() {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-5">
 
-        {/* ── Setup cards ── */}
         {!setupDone && (
           <>
             <div className="mb-2">
               <h2 className="text-white font-semibold text-lg">Welcome to KalshiBot</h2>
               <p className="text-gray-400 text-sm mt-1">
-                Connect your accounts below to get started — these cards will disappear once everything is set up.
+                Connect your accounts below to get started.
               </p>
             </div>
             <SetupCards
@@ -204,7 +220,6 @@ export default function DashboardPage() {
           </>
         )}
 
-        {/* ── Main dashboard ── */}
         {setupDone && (
           <>
             <StatsCards
@@ -227,6 +242,8 @@ export default function DashboardPage() {
                     ? 'The bot is actively trading on Kalshi markets.'
                     : botStatus === 'starting'
                     ? 'Connecting to GitHub and verifying Kalshi credentials...'
+                    : botStatus === 'stopping'
+                    ? 'Cancelling the active workflow run...'
                     : 'Start the bot to begin automated BTC/RSI trading.'}
                 </p>
               </div>
@@ -248,7 +265,12 @@ export default function DashboardPage() {
                   disabled={botStatus !== 'running'}
                   className="btn-danger min-w-[110px]"
                 >
-                  {botStatus === 'stopping' ? 'Stopping...' : '■  Stop Bot'}
+                  {botStatus === 'stopping' ? (
+                    <>
+                      <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Stopping...
+                    </>
+                  ) : '■  Stop Bot'}
                 </button>
               </div>
             </div>
