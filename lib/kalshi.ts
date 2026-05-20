@@ -6,10 +6,10 @@ function signRequest(privateKeyPem: string, timestamp: number, method: string, p
   // Normalize line endings — browsers may submit \r\n, PEM requires \n
   const key = privateKeyPem.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim()
   const msg = `${timestamp}${method.toUpperCase()}${path}`
-  const sign = crypto.createSign('RSA-SHA256')
+  const sign = crypto.createSign('SHA256')
   sign.update(msg)
   sign.end()
-  return sign.sign({ key, format: 'pem', type: 'pkcs1', padding: crypto.constants.RSA_PKCS1_PADDING }, 'base64')
+  return sign.sign({ key, format: 'pem', type: 'pkcs1', padding: crypto.constants.RSA_PKCS1_PSS_PADDING, saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST }, 'base64')
 }
 
 async function kalshiFetch(
