@@ -10,19 +10,20 @@ type Props = {
 }
 
 function KalshiCard({ onSaved }: { onSaved: () => void }) {
-  const [key, setKey]       = useState('')
-  const [saving, setSaving] = useState(false)
-  const [error, setError]   = useState('')
+  const [apiKey,  setApiKey]  = useState('')
+  const [privKey, setPrivKey] = useState('')
+  const [saving,  setSaving]  = useState(false)
+  const [error,   setError]   = useState('')
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!key.trim()) return
+    if (!apiKey.trim() || !privKey.trim()) return
     setSaving(true); setError('')
     try {
       const res = await fetch('/api/user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ kalshiApiKey: key.trim() }),
+        body: JSON.stringify({ kalshiApiKey: apiKey.trim(), kalshiPrivateKey: privKey.trim() }),
       })
       if (!res.ok) throw new Error((await res.json()).error || 'Failed to save')
       onSaved()
@@ -43,30 +44,44 @@ function KalshiCard({ onSaved }: { onSaved: () => void }) {
         <div>
           <h3 className="font-semibold text-white">Connect your Kalshi account</h3>
           <p className="text-gray-400 text-sm mt-0.5">
-            Get your API key at{' '}
-            <a href="https://kalshi.com" target="_blank" rel="noopener noreferrer"
-               className="text-[#4f8ef7] hover:underline">
+            Get both keys at{' '}
+            <a href="https://kalshi.com" target="_blank" rel="noopener noreferrer" className="text-[#4f8ef7] hover:underline">
               kalshi.com → Settings → API
             </a>
           </p>
         </div>
       </div>
-      <form onSubmit={handleSubmit} className="flex gap-2">
-        <input
-          type="password"
-          placeholder="Paste your Kalshi API key..."
-          value={key}
-          onChange={e => setKey(e.target.value)}
-          required
-          className="input flex-1 font-mono text-xs"
-        />
-        <button type="submit" disabled={saving || !key.trim()} className="btn-primary shrink-0">
+      <form onSubmit={handleSubmit} className="space-y-3">
+        <div>
+          <label className="text-xs text-gray-400 mb-1 block">API Key</label>
+          <input
+            type="password"
+            placeholder="e.g. e2475509-4a0c-4beb-9d45-be55a920d057"
+            value={apiKey}
+            onChange={e => setApiKey(e.target.value)}
+            required
+            className="input w-full font-mono text-xs"
+          />
+        </div>
+        <div>
+          <label className="text-xs text-gray-400 mb-1 block">RSA Private Key <span className="text-gray-600">(PEM format)</span></label>
+          <textarea
+            placeholder={"-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA...\n-----END RSA PRIVATE KEY-----"}
+            value={privKey}
+            onChange={e => setPrivKey(e.target.value)}
+            required
+            rows={5}
+            className="input w-full font-mono text-xs resize-none"
+            style={{ lineHeight: '1.4' }}
+          />
+        </div>
+        <button type="submit" disabled={saving || !apiKey.trim() || !privKey.trim()} className="btn-primary w-full">
           {saving ? (
-            <span className="flex items-center gap-2">
+            <span className="flex items-center justify-center gap-2">
               <span className="w-4 h-4 border-2 border-[#0a0b0d] border-t-transparent rounded-full animate-spin" />
-              Saving...
+              Connecting...
             </span>
-          ) : 'Connect'}
+          ) : 'Connect Kalshi →'}
         </button>
       </form>
       {error && <p className="text-[#ff4d6d] text-xs mt-2">{error}</p>}
@@ -91,15 +106,14 @@ function GitHubCard({ onSaved }: { onSaved: () => void }) {
     if (!pat.trim()) return
     setLoading(true); setError(''); setRepos([]); setSelected(null)
     try {
-      const res = await fetch('/api/github/repos', {
+      const res  = await fetch('/api/github/repos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pat: pat.trim() }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
-      setLogin(data.login)
-      setRepos(data.repos)
+      setLogin(data.login); setRepos(data.repos)
     } catch (err: any) {
       setError(err.message)
     } finally {
@@ -114,11 +128,7 @@ function GitHubCard({ onSaved }: { onSaved: () => void }) {
       const res = await fetch('/api/user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          githubPat:      pat.trim(),
-          githubUsername: login,
-          githubRepo:     selected.full_name,
-        }),
+        body: JSON.stringify({ githubPat: pat.trim(), githubUsername: login, githubRepo: selected.full_name }),
       })
       if (!res.ok) throw new Error((await res.json()).error || 'Failed to save')
       onSaved()
@@ -128,9 +138,7 @@ function GitHubCard({ onSaved }: { onSaved: () => void }) {
     }
   }
 
-  const filtered = repos.filter(r =>
-    r.name.toLowerCase().includes(filter.toLowerCase())
-  )
+  const filtered  = repos.filter(r => r.name.toLowerCase().includes(filter.toLowerCase()))
   const suggested = filtered.filter(r => r.suggested)
   const rest      = filtered.filter(r => !r.suggested)
 
@@ -146,21 +154,14 @@ function GitHubCard({ onSaved }: { onSaved: () => void }) {
           <h3 className="font-semibold text-white">Connect your GitHub</h3>
           <p className="text-gray-400 text-sm mt-0.5">
             First{' '}
-            <a href="https://github.com/InTheNightRaider/KalshiTradingBot/fork"
-               target="_blank" rel="noopener noreferrer" className="text-[#4f8ef7] hover:underline">
-              fork the bot repo
-            </a>
+            <a href="https://github.com/InTheNightRaider/KalshiTradingBot/fork" target="_blank" rel="noopener noreferrer" className="text-[#4f8ef7] hover:underline">fork the bot repo</a>
             {', then '}
-            <a href="https://github.com/settings/tokens/new?scopes=repo,workflow&description=KalshiBot"
-               target="_blank" rel="noopener noreferrer" className="text-[#4f8ef7] hover:underline">
-              create a PAT
-            </a>
+            <a href="https://github.com/settings/tokens/new?scopes=repo,workflow&description=KalshiBot" target="_blank" rel="noopener noreferrer" className="text-[#4f8ef7] hover:underline">create a PAT</a>
             {' with repo + workflow scopes.'}
           </p>
         </div>
       </div>
 
-      {/* PAT input */}
       {repos.length === 0 ? (
         <form onSubmit={fetchRepos} className="flex gap-2">
           <input
@@ -181,34 +182,20 @@ function GitHubCard({ onSaved }: { onSaved: () => void }) {
           </button>
         </form>
       ) : (
-        /* Repo picker */
         <div className="space-y-3">
           <div className="flex items-center gap-2">
             <span className="text-xs text-[#00d17a] font-mono">@{login}</span>
             <span className="text-gray-500 text-xs">— select your forked bot repo:</span>
-            <button onClick={() => { setRepos([]); setSelected(null) }}
-                    className="ml-auto text-xs text-gray-600 hover:text-gray-400">
-              ← Change PAT
-            </button>
+            <button onClick={() => { setRepos([]); setSelected(null) }} className="ml-auto text-xs text-gray-600 hover:text-gray-400">← Change PAT</button>
           </div>
-
-          {/* Filter */}
-          <input
-            type="text"
-            placeholder="Filter repos..."
-            value={filter}
-            onChange={e => setFilter(e.target.value)}
-            className="input text-sm"
-          />
-
-          {/* Repo list */}
+          <input type="text" placeholder="Filter repos..." value={filter} onChange={e => setFilter(e.target.value)} className="input text-sm" />
           <div className="max-h-52 overflow-y-auto rounded-lg border border-[#252c3a] divide-y divide-[#1e2330]">
             {suggested.length > 0 && (
               <div className="px-3 py-1.5 bg-[#00d17a]/5">
                 <span className="text-[10px] text-[#00d17a] uppercase tracking-wider font-medium">Suggested</span>
               </div>
             )}
-            {[...suggested, ...(suggested.length > 0 && rest.length > 0 ? [null] : []), ...rest].map((r, i) => {
+            {[...suggested, ...(suggested.length > 0 && rest.length > 0 ? [null] : []), ...rest].map((r) => {
               if (r === null) return (
                 <div key="divider" className="px-3 py-1.5 bg-[#111318]">
                   <span className="text-[10px] text-gray-600 uppercase tracking-wider">All repos</span>
@@ -216,14 +203,9 @@ function GitHubCard({ onSaved }: { onSaved: () => void }) {
               )
               const isSelected = selected?.id === r.id
               return (
-                <button
-                  key={r.id}
-                  onClick={() => setSelected(r)}
-                  className={`w-full text-left px-4 py-3 flex items-center gap-3 transition-colors
-                    ${isSelected ? 'bg-[#4f8ef7]/10' : 'hover:bg-[#1e2330]'}`}
-                >
-                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0
-                    ${isSelected ? 'border-[#4f8ef7] bg-[#4f8ef7]' : 'border-[#252c3a]'}`}>
+                <button key={r.id} onClick={() => setSelected(r)}
+                  className={`w-full text-left px-4 py-3 flex items-center gap-3 transition-colors ${isSelected ? 'bg-[#4f8ef7]/10' : 'hover:bg-[#1e2330]'}`}>
+                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${isSelected ? 'border-[#4f8ef7] bg-[#4f8ef7]' : 'border-[#252c3a]'}`}>
                     {isSelected && <div className="w-1.5 h-1.5 bg-white rounded-full" />}
                   </div>
                   <div className="min-w-0">
@@ -234,17 +216,11 @@ function GitHubCard({ onSaved }: { onSaved: () => void }) {
                 </button>
               )
             })}
-            {filtered.length === 0 && (
-              <div className="px-4 py-6 text-center text-gray-500 text-sm">No repos match "{filter}"</div>
-            )}
+            {filtered.length === 0 && <div className="px-4 py-6 text-center text-gray-500 text-sm">No repos match</div>}
           </div>
-
-          {/* Confirm */}
           {selected && (
             <div className="flex items-center gap-3 pt-1">
-              <div className="flex-1 bg-[#1e2330] rounded-lg px-3 py-2 text-xs font-mono text-gray-300 truncate">
-                {selected.full_name}
-              </div>
+              <div className="flex-1 bg-[#1e2330] rounded-lg px-3 py-2 text-xs font-mono text-gray-300 truncate">{selected.full_name}</div>
               <button onClick={handleSave} disabled={saving} className="btn-primary shrink-0">
                 {saving ? 'Saving...' : 'Use this repo →'}
               </button>
@@ -252,7 +228,6 @@ function GitHubCard({ onSaved }: { onSaved: () => void }) {
           )}
         </div>
       )}
-
       {error && <p className="text-[#ff4d6d] text-xs mt-2">{error}</p>}
     </div>
   )
@@ -260,7 +235,6 @@ function GitHubCard({ onSaved }: { onSaved: () => void }) {
 
 export default function SetupCards({ kalshiKeySet, githubConnected, onKalshiSaved, onGitHubSaved }: Props) {
   if (kalshiKeySet && githubConnected) return null
-
   return (
     <div className="space-y-3">
       {!kalshiKeySet    && <KalshiCard onSaved={onKalshiSaved} />}
