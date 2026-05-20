@@ -1,13 +1,12 @@
 type Props = {
-  currentBalance:  number
-  startingBalance: number
-  profitPct:       string
-  winRate:         string
-  totalTrades:     number
-  wins:            number
-  losses:          number
-  totalPnl:        number
-  loading:         boolean
+  availableBalance: number
+  portfolioValue:   number
+  winRate:          string
+  totalTrades:      number
+  wins:             number
+  losses:           number
+  totalPnl:         number
+  loading:          boolean
 }
 
 function Card({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
@@ -20,9 +19,18 @@ function Card({ label, value, sub, color }: { label: string; value: string; sub?
   )
 }
 
-export default function StatsCards({ currentBalance, startingBalance, profitPct, winRate, totalTrades, wins, losses, totalPnl, loading }: Props) {
-  const pnlPositive = totalPnl >= 0
-  const profitPositive = parseFloat(profitPct) >= 0
+export default function StatsCards({
+  availableBalance,
+  portfolioValue,
+  winRate,
+  totalTrades,
+  wins,
+  losses,
+  totalPnl,
+  loading,
+}: Props) {
+  const totalPortfolio = availableBalance + portfolioValue
+  const pnlPositive    = totalPnl >= 0
 
   if (loading) {
     return (
@@ -40,16 +48,18 @@ export default function StatsCards({ currentBalance, startingBalance, profitPct,
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
       <Card
-        label="Current Balance"
-        value={`$${currentBalance.toFixed(2)}`}
-        sub={`Started at $${startingBalance.toFixed(2)}`}
+        label="Portfolio Value"
+        value={`$${totalPortfolio.toFixed(2)}`}
+        sub={portfolioValue > 0
+          ? `$${availableBalance.toFixed(2)} cash + $${portfolioValue.toFixed(2)} positions`
+          : `$${availableBalance.toFixed(2)} available cash`}
         color="text-white"
       />
       <Card
-        label="Total Profit"
-        value={`${profitPositive ? '+' : ''}${profitPct}%`}
-        sub={`$${Math.abs(totalPnl).toFixed(2)} ${pnlPositive ? 'gained' : 'lost'}`}
-        color={profitPositive ? 'text-[#00d17a]' : 'text-[#ff4d6d]'}
+        label="Realized P&L"
+        value={`${pnlPositive ? '+' : ''}$${Math.abs(totalPnl).toFixed(2)}`}
+        sub={`across ${totalTrades} settled trade${totalTrades !== 1 ? 's' : ''}`}
+        color={pnlPositive ? 'text-[#00d17a]' : 'text-[#ff4d6d]'}
       />
       <Card
         label="Win Rate"
