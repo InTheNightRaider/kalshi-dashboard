@@ -21,6 +21,7 @@ export default function DashboardPage() {
   const [positions,   setPositions]   = useState<any[]>([])
   const [settlements, setSettlements] = useState<any[]>([])
   const [dataLoading, setDataLoading] = useState(true)
+  const [apiError,    setApiError]    = useState<string | null>(null)
 
   const [botStatus, setBotStatus] = useState<BotStatus>('idle')
   const [modal,     setModal]     = useState<{ type: 'success' | 'error'; message: string } | null>(null)
@@ -41,16 +42,26 @@ export default function DashboardPage() {
 
   const fetchAll = useCallback(async () => {
     if (!kalshiKeySet) return
+    setApiError(null)
     try {
       const [portRes, posRes, settRes] = await Promise.all([
         fetch('/api/kalshi/portfolio'),
         fetch('/api/kalshi/positions'),
         fetch('/api/kalshi/settlements'),
       ])
-      if (portRes.ok) setPortfolio(await portRes.json())
+
+      if (!portRes.ok) {
+        const err = await portRes.json()
+        setApiError(err.error ?? 'Failed to load portfolio')
+        return
+      }
+
+      setPortfolio(await portRes.json())
       if (posRes.ok)  setPositions((await posRes.json()).positions ?? [])
       if (settRes.ok) setSettlements((await settRes.json()).settlements ?? [])
-    } catch { /* keep existing data */ } finally {
+    } catch (e: any) {
+      setApiError(e.message ?? 'Network error')
+    } finally {
       setDataLoading(false)
     }
   }, [kalshiKeySet])
@@ -92,13 +103,12 @@ export default function DashboardPage() {
     }
   }
 
-  const settleWins   = settlements.filter(s => (s.revenue ?? 0) > ((s.no_cost ?? 0) + (s.yes_cost ?? 0))).length
+  const settleWins   = settlements.filter(s => (s.revenue ?? 0) > 0).length
   const settleLosses = settlements.length - settleWins
   const winRate      = settlements.length > 0
     ? ((settleWins / settlements.length) * 100).toFixed(1)
     : '0.0'
-  const totalPnl = settlements.reduce((sum, s) =>
-    sum + (s.revenue ?? 0) - (s.no_cost ?? 0) - (s.yes_cost ?? 0), 0) / 100
+  const totalPnl = settlements.reduce((sum, s) => sum + (s.revenue ?? 0), 0) / 100
 
   const currentBalance  = portfolio?.available_balance ?? 0
   const startingBalance = 50
@@ -138,7 +148,7 @@ export default function DashboardPage() {
           </div>
           <div className="flex items-center gap-3">
             {setupDone && (
-              <button onClick={fetchAll} className="btn-secondary text-xs py-1.5 px-3">Refresh</button>
+              <button onClick={() => fetchAll()} className="btn-secondary text-xs py-1.5 px-3">↻ Refresh</button>
             )}
             <UserButton afterSignOutUrl="/sign-in" />
           </div>
@@ -164,6 +174,22 @@ export default function DashboardPage() {
 
         {setupDone && (
           <>
+            {apiError && (
+              <div className="bg-[#ff4d6d]/10 border border-[#ff4d6d]/30 rounded-xl px-5 py-4 flex items-start gap-3">
+                <span className="text-[#ff4d6d] text-lg shrink-0 mt-0.5">⚠</span>
+                <div className="min-w-0">
+                  <p className="text-[#ff4d6d] font-medium text-sm">Kalshi API error</p>
+                  <p className="text-gray-400 text-xs mt-1 font-mono break-all">{apiError}</p>
+                  <p className="text-gray-500 text-xs mt-2">
+                    Your API key may be invalid or expired.{' '}
+                    <a href="https://kalshi.com" target="_blank" rel="noopener noreferrer" className="text-[#4f8ef7] hover:underline">
+                      Check at kalshi.com → Settings → API
+                    </a>
+                  </p>
+                </div>
+              </div>
+            )}
+
             <StatsCards
               currentBalance={currentBalance}
               startingBalance={startingBalance}
