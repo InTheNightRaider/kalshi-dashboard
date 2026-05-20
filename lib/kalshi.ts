@@ -1,4 +1,4 @@
-const KALSHI_BASE = 'https://trading-api.kalshi.com/trade-api/v2'
+const KALSHI_BASE = 'https://api.elections.kalshi.com/trade-api/v2'
 
 async function kalshiFetch(path: string, apiKey: string, params?: Record<string, string>) {
   const url = new URL(`${KALSHI_BASE}${path}`)

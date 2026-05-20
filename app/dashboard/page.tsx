@@ -2,11 +2,12 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useUser, UserButton } from '@clerk/nextjs'
-import BTCChart    from '@/components/BTCChart'
-import StatsCards  from '@/components/StatsCards'
-import TradeTable  from '@/components/TradeTable'
-import Modal       from '@/components/Modal'
-import SetupCards  from '@/components/SetupCards'
+import BTCChart       from '@/components/BTCChart'
+import StatsCards     from '@/components/StatsCards'
+import TradeTable     from '@/components/TradeTable'
+import Modal          from '@/components/Modal'
+import SetupCards     from '@/components/SetupCards'
+import SettingsModal  from '@/components/SettingsModal'
 
 type BotStatus = 'idle' | 'running' | 'starting' | 'stopping'
 
@@ -15,7 +16,10 @@ export default function DashboardPage() {
 
   const [kalshiKeySet,    setKalshiKeySet]    = useState(false)
   const [githubConnected, setGithubConnected] = useState(false)
+  const [githubUsername,  setGithubUsername]  = useState<string | null>(null)
+  const [githubRepo,      setGithubRepo]      = useState<string | null>(null)
   const [setupLoading,    setSetupLoading]    = useState(true)
+  const [showSettings,    setShowSettings]    = useState(false)
 
   const [portfolio,   setPortfolio]   = useState<any>(null)
   const [positions,   setPositions]   = useState<any[]>([])
@@ -33,6 +37,8 @@ export default function DashboardPage() {
       const data = await res.json()
       setKalshiKeySet(!!data.kalshiKeySet)
       setGithubConnected(!!data.githubConnected)
+      setGithubUsername(data.githubUsername ?? null)
+      setGithubRepo(data.githubRepo ?? null)
     } finally {
       setSetupLoading(false)
     }
@@ -49,13 +55,11 @@ export default function DashboardPage() {
         fetch('/api/kalshi/positions'),
         fetch('/api/kalshi/settlements'),
       ])
-
       if (!portRes.ok) {
         const err = await portRes.json()
         setApiError(err.error ?? 'Failed to load portfolio')
         return
       }
-
       setPortfolio(await portRes.json())
       if (posRes.ok)  setPositions((await posRes.json()).positions ?? [])
       if (settRes.ok) setSettlements((await settRes.json()).settlements ?? [])
@@ -105,17 +109,11 @@ export default function DashboardPage() {
 
   const settleWins   = settlements.filter(s => (s.revenue ?? 0) > 0).length
   const settleLosses = settlements.length - settleWins
-  const winRate      = settlements.length > 0
-    ? ((settleWins / settlements.length) * 100).toFixed(1)
-    : '0.0'
-  const totalPnl = settlements.reduce((sum, s) => sum + (s.revenue ?? 0), 0) / 100
-
+  const winRate      = settlements.length > 0 ? ((settleWins / settlements.length) * 100).toFixed(1) : '0.0'
+  const totalPnl     = settlements.reduce((sum, s) => sum + (s.revenue ?? 0), 0) / 100
   const currentBalance  = portfolio?.available_balance ?? 0
   const startingBalance = 50
-  const profitPct = currentBalance > 0 && startingBalance > 0
-    ? (((currentBalance - startingBalance) / startingBalance) * 100).toFixed(1)
-    : '0.0'
-
+  const profitPct = currentBalance > 0 ? (((currentBalance - startingBalance) / startingBalance) * 100).toFixed(1) : '0.0'
   const setupDone = kalshiKeySet && githubConnected
 
   const statusColor = { idle: 'text-gray-500', running: 'text-[#00d17a]', starting: 'text-[#f5c842]', stopping: 'text-[#ff4d6d]' }[botStatus]
@@ -146,10 +144,20 @@ export default function DashboardPage() {
               </span>
             )}
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             {setupDone && (
               <button onClick={() => fetchAll()} className="btn-secondary text-xs py-1.5 px-3">↻ Refresh</button>
             )}
+            <button
+              onClick={() => setShowSettings(true)}
+              title="Settings"
+              className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-white hover:bg-[#1e2330] transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </button>
             <UserButton afterSignOutUrl="/sign-in" />
           </div>
         </div>
@@ -167,7 +175,7 @@ export default function DashboardPage() {
               kalshiKeySet={kalshiKeySet}
               githubConnected={githubConnected}
               onKalshiSaved={() => { setKalshiKeySet(true); fetchAll() }}
-              onGitHubSaved={() => setGithubConnected(true)}
+              onGitHubSaved={() => { setGithubConnected(true); fetchSetup() }}
             />
           </>
         )}
@@ -180,12 +188,9 @@ export default function DashboardPage() {
                 <div className="min-w-0">
                   <p className="text-[#ff4d6d] font-medium text-sm">Kalshi API error</p>
                   <p className="text-gray-400 text-xs mt-1 font-mono break-all">{apiError}</p>
-                  <p className="text-gray-500 text-xs mt-2">
-                    Your API key may be invalid or expired.{' '}
-                    <a href="https://kalshi.com" target="_blank" rel="noopener noreferrer" className="text-[#4f8ef7] hover:underline">
-                      Check at kalshi.com → Settings → API
-                    </a>
-                  </p>
+                  <button onClick={() => setShowSettings(true)} className="text-[#4f8ef7] text-xs mt-2 hover:underline">
+                    Update API key in Settings →
+                  </button>
                 </div>
               </div>
             )}
@@ -269,6 +274,17 @@ export default function DashboardPage() {
       </div>
 
       {modal && <Modal type={modal.type} message={modal.message} onClose={() => setModal(null)} />}
+
+      {showSettings && (
+        <SettingsModal
+          kalshiKeySet={kalshiKeySet}
+          githubConnected={githubConnected}
+          githubUsername={githubUsername}
+          githubRepo={githubRepo}
+          onClose={() => setShowSettings(false)}
+          onSaved={() => { fetchSetup(); fetchAll() }}
+        />
+      )}
     </div>
   )
 }
