@@ -95,19 +95,19 @@ export default function DashboardPage() {
     }
   }
 
+  const currentBalance  = portfolio?.available_balance ?? 0
+  const startingBalance = 50
+  const profitPct       = currentBalance > 0 && startingBalance > 0
+    ? (((currentBalance - startingBalance) / startingBalance) * 100).toFixed(1)
+    : '0.0'
+  // P&L = net change in account balance (most reliable; settlement cost fields not available)
+  const totalPnl = Number(currentBalance) - startingBalance
+
   // Win/loss: a settled trade is a win if we received any revenue
   const settleWins   = settlements.filter(s => (s.revenue ?? 0) > 0).length
   const settleLosses = settlements.length - settleWins
   const winRate      = settlements.length > 0
     ? ((settleWins / settlements.length) * 100).toFixed(1)
-    : '0.0'
-  // P&L = net change in account balance (most reliable; settlement cost fields not available)
-  const totalPnl = Number(currentBalance) - startingBalance
-
-  const currentBalance  = portfolio?.available_balance ?? 0
-  const startingBalance = 50
-  const profitPct       = currentBalance > 0 && startingBalance > 0
-    ? (((currentBalance - startingBalance) / startingBalance) * 100).toFixed(1)
     : '0.0'
 
   const setupDone = kalshiKeySet && githubConnected
