@@ -16,23 +16,19 @@ export default function DashboardPage() {
   const { isLoaded } = useUser()
   const [activeTab, setActiveTab] = useState<ActiveTab>('live')
 
-  // ── Setup state ─────────────────────────────────────────────────────────────
   const [kalshiKeySet,    setKalshiKeySet]    = useState(false)
   const [githubConnected, setGithubConnected] = useState(false)
   const [setupLoading,    setSetupLoading]    = useState(true)
 
-  // ── Kalshi data ──────────────────────────────────────────────────────────────
   const [portfolio,   setPortfolio]   = useState<any>(null)
   const [positions,   setPositions]   = useState<any[]>([])
   const [settlements, setSettlements] = useState<any[]>([])
   const [dataLoading, setDataLoading] = useState(true)
 
-  // ── Bot / UI state ────────────────────────────────────────────────────────────
   const [botStatus, setBotStatus] = useState<BotStatus>('idle')
   const [modal,     setModal]     = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval>>()
 
-  // ── Fetch setup status from Clerk metadata flags ──────────────────────────────
   const fetchSetup = useCallback(async () => {
     try {
       const res  = await fetch('/api/user')
@@ -46,7 +42,6 @@ export default function DashboardPage() {
 
   useEffect(() => { fetchSetup() }, [fetchSetup])
 
-  // ── Fetch Kalshi data (only once setup is done) ───────────────────────────────
   const fetchAll = useCallback(async () => {
     if (!kalshiKeySet) return
     try {
@@ -70,7 +65,6 @@ export default function DashboardPage() {
     return () => clearInterval(pollRef.current)
   }, [fetchAll, kalshiKeySet])
 
-  // ── Bot controls ──────────────────────────────────────────────────────────────
   const handleStart = async () => {
     setBotStatus('starting')
     try {
@@ -78,7 +72,7 @@ export default function DashboardPage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
       const bal = data.balance != null ? ` Portfolio: $${data.balance.toFixed(2)}.` : ''
-      setModal({ type: 'success', message: `Bot started!${bal} Happy trading! 🎉` })
+      setModal({ type: 'success', message: `Bot started!${bal} Happy trading!` })
       setBotStatus('running')
       fetchAll()
     } catch (err: any) {
@@ -101,7 +95,6 @@ export default function DashboardPage() {
     }
   }
 
-  // ── Derived stats ─────────────────────────────────────────────────────────────
   const settleWins   = settlements.filter(s => (s.revenue ?? 0) > ((s.no_cost ?? 0) + (s.yes_cost ?? 0))).length
   const settleLosses = settlements.length - settleWins
   const winRate      = settlements.length > 0
@@ -118,7 +111,6 @@ export default function DashboardPage() {
 
   const setupDone = kalshiKeySet && githubConnected
 
-  // ── Status badge ──────────────────────────────────────────────────────────────
   const statusColor = {
     idle:     'text-gray-500',
     running:  'text-[#00d17a]',
@@ -133,7 +125,6 @@ export default function DashboardPage() {
     stopping: '◌ STOPPING',
   }[botStatus]
 
-  // ── Loading skeleton ──────────────────────────────────────────────────────────
   if (!isLoaded || setupLoading) {
     return (
       <div className="min-h-screen bg-[#0a0b0d] flex items-center justify-center">
@@ -145,7 +136,7 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-[#0a0b0d]">
 
-      {/* ── Navbar ── */}
+      {/* Navbar */}
       <nav className="border-b border-[#252c3a] bg-[#111318]/90 backdrop-blur-sm sticky top-0 z-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -172,7 +163,7 @@ export default function DashboardPage() {
         </div>
       </nav>
 
-      {/* ── Tab bar ── */}
+      {/* Tab bar */}
       <div className="border-b border-[#252c3a] bg-[#111318]/60">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 flex gap-1 pt-1">
           <button
@@ -200,15 +191,14 @@ export default function DashboardPage() {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-5">
 
-        {/* ── Backtest tab ── */}
+        {/* Backtest tab */}
         {activeTab === 'backtest' && (
           <BacktestDashboard />
         )}
 
-        {/* ── Live tab ── */}
+        {/* Live tab */}
         {activeTab === 'live' && (
           <>
-            {/* Setup cards (disappear once both are configured) */}
             {!setupDone && (
               <>
                 <div className="mb-2">
@@ -229,10 +219,8 @@ export default function DashboardPage() {
               </>
             )}
 
-            {/* Main dashboard (shown only when fully set up) */}
             {setupDone && (
               <>
-                {/* Stats */}
                 <StatsCards
                   currentBalance={currentBalance}
                   startingBalance={startingBalance}
@@ -245,7 +233,6 @@ export default function DashboardPage() {
                   loading={dataLoading}
                 />
 
-                {/* Bot Controls */}
                 <div className="card flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                   <div>
                     <h3 className="font-semibold text-white">Bot Control</h3>
@@ -280,7 +267,6 @@ export default function DashboardPage() {
                   </div>
                 </div>
 
-                {/* BTC Chart */}
                 <div className="card">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="font-semibold text-white">
@@ -291,7 +277,6 @@ export default function DashboardPage() {
                   <BTCChart />
                 </div>
 
-                {/* Open Positions */}
                 <div className="card">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="font-semibold text-white">
@@ -303,4 +288,40 @@ export default function DashboardPage() {
                   {dataLoading ? (
                     <div className="h-20 flex items-center justify-center text-gray-500 text-sm animate-pulse">Loading positions...</div>
                   ) : positions.length === 0 ? (
-                    <div 
+                    <div className="h-20 flex items-center justify-center text-gray-600 text-sm">No open positions right now.</div>
+                  ) : (
+                    <TradeTable trades={positions} type="open" />
+                  )}
+                </div>
+
+                <div className="card">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-semibold text-white">
+                      Trade History
+                      <span className="ml-2 badge-yellow">{settlements.length}</span>
+                    </h3>
+                  </div>
+                  {dataLoading ? (
+                    <div className="h-20 flex items-center justify-center text-gray-500 text-sm animate-pulse">Loading history...</div>
+                  ) : settlements.length === 0 ? (
+                    <div className="h-20 flex items-center justify-center text-gray-600 text-sm">No completed trades yet — start the bot to begin.</div>
+                  ) : (
+                    <TradeTable trades={settlements} type="closed" />
+                  )}
+                </div>
+
+                <p className="text-center text-gray-700 text-xs pb-6">
+                  Past performance does not guarantee future results. Trading prediction markets involves risk of loss. Not financial advice.
+                </p>
+              </>
+            )}
+          </>
+        )}
+
+      </div>
+
+      {modal && <Modal type={modal.type} message={modal.message} onClose={() => setModal(null)} />}
+    </div>
+  )
+}
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
