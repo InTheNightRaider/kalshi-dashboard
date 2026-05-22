@@ -270,7 +270,7 @@ export default function DashboardPage() {
                 <div className="card">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="font-semibold text-white">
-                      BTC / USD <span className="text-gray-600 font-normal text-sm">— 15 min</span>
+                      BTC / USD <span className="text-gray-600 font-normal text-sm">&mdash; 15 min</span>
                     </h3>
                     <span className="text-gray-500 text-xs">Live via TradingView</span>
                   </div>
@@ -324,4 +324,3 @@ export default function DashboardPage() {
     </div>
   )
 }
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
