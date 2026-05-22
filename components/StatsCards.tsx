@@ -1,12 +1,13 @@
 type Props = {
-  availableBalance: number
-  portfolioValue:   number
-  winRate:          string
-  totalTrades:      number
-  wins:             number
-  losses:           number
-  totalPnl:         number
-  loading:          boolean
+  currentBalance:  number
+  startingBalance: number
+  profitPct:       string
+  winRate:         string
+  totalTrades:     number
+  wins:            number
+  losses:          number
+  totalPnl:        number
+  loading:         boolean
 }
 
 function Card({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
@@ -20,8 +21,9 @@ function Card({ label, value, sub, color }: { label: string; value: string; sub?
 }
 
 export default function StatsCards({
-  availableBalance,
-  portfolioValue,
+  currentBalance,
+  startingBalance,
+  profitPct,
   winRate,
   totalTrades,
   wins,
@@ -29,8 +31,8 @@ export default function StatsCards({
   totalPnl,
   loading,
 }: Props) {
-  const totalPortfolio = availableBalance + portfolioValue
   const pnlPositive    = totalPnl >= 0
+  const profitPositive = parseFloat(profitPct) >= 0
 
   if (loading) {
     return (
@@ -48,12 +50,16 @@ export default function StatsCards({
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
       <Card
-        label="Portfolio Value"
-        value={`$${totalPortfolio.toFixed(2)}`}
-        sub={portfolioValue > 0
-          ? `$${availableBalance.toFixed(2)} cash + $${portfolioValue.toFixed(2)} positions`
-          : `$${availableBalance.toFixed(2)} available cash`}
+        label="Balance"
+        value={`$${Number(currentBalance).toFixed(2)}`}
+        sub={`started at $${startingBalance.toFixed(2)}`}
         color="text-white"
+      />
+      <Card
+        label="Return"
+        value={`${profitPositive ? '+' : ''}${profitPct}%`}
+        sub={`vs $${startingBalance.toFixed(2)} starting`}
+        color={profitPositive ? 'text-[#00d17a]' : 'text-[#ff4d6d]'}
       />
       <Card
         label="Realized P&L"
@@ -66,12 +72,6 @@ export default function StatsCards({
         value={`${winRate}%`}
         sub={`${wins}W / ${losses}L`}
         color={parseFloat(winRate) >= 50 ? 'text-[#00d17a]' : 'text-[#f5c842]'}
-      />
-      <Card
-        label="Total Trades"
-        value={String(totalTrades)}
-        sub={totalTrades === 0 ? 'No closed trades yet' : `${wins} wins, ${losses} losses`}
-        color="text-[#4f8ef7]"
       />
     </div>
   )
