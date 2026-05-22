@@ -202,7 +202,8 @@ export default function BacktestDashboard() {
   // ─── stats ─────────────────────────────────────────────────────────────────
   var stats = useMemo(function() {
     if (mode === "m4") return (M4_DATA[period] || {})[m4Thresh] || null;
-    return (DATA[period] || {})[mode] || null;
+    var dataKey = "mode" + mode.slice(1); // m1 -> mode1, m2 -> mode2, m3 -> mode3
+    return (DATA[period] || {})[dataKey] || null;
   }, [mode, period, m4Thresh]);
 
   // ─── chart data (downsampled) ──────────────────────────────────────────────
@@ -317,7 +318,7 @@ export default function BacktestDashboard() {
               onChange={function(e) { setM4Thresh(Number(e.target.value)); resetPage(); }}
               className="bg-transparent text-[#f5c842] text-xs font-semibold focus:outline-none cursor-pointer"
             >
-              {[50, 100, 150, 200, 250, 300, 350].map(function(v) {
+              {[150, 200, 250, 300, 350].map(function(v) {
                 return <option key={v} value={v} className="bg-[#1e2330]">${v}+</option>;
               })}
             </select>
