@@ -95,13 +95,14 @@ export default function DashboardPage() {
     }
   }
 
-  const settleWins   = settlements.filter(s => (s.revenue ?? 0) > ((s.no_cost ?? 0) + (s.yes_cost ?? 0))).length
+  // Win/loss: a settled trade is a win if we received any revenue
+  const settleWins   = settlements.filter(s => (s.revenue ?? 0) > 0).length
   const settleLosses = settlements.length - settleWins
   const winRate      = settlements.length > 0
     ? ((settleWins / settlements.length) * 100).toFixed(1)
     : '0.0'
-  const totalPnl     = settlements.reduce((sum, s) =>
-    sum + (s.revenue ?? 0) - (s.no_cost ?? 0) - (s.yes_cost ?? 0), 0) / 100
+  // P&L = net change in account balance (most reliable; settlement cost fields not available)
+  const totalPnl = Number(currentBalance) - startingBalance
 
   const currentBalance  = portfolio?.available_balance ?? 0
   const startingBalance = 50
