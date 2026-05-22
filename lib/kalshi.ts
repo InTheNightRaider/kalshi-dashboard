@@ -1,64 +1,37 @@
-import crypto from 'crypto'
+const KALSHI_BASE = 'https://trading-api.kalshi.com/trade-api/v2'
 
-const KALSHI_BASE = 'https://api.elections.kalshi.com/trade-api/v2'
-
-function signRequest(privateKeyPem: string, timestamp: number, method: string, path: string): string {
-  const key = privateKeyPem.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim()
-  const msg = `${timestamp}${method.toUpperCase()}${path}`
-  const sign = crypto.createSign('SHA256')
-  sign.update(msg)
-  sign.end()
-  return sign.sign({ key, format: 'pem', type: 'pkcs1', padding: crypto.constants.RSA_PKCS1_PSS_PADDING, saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST }, 'base64')
-}
-
-async function kalshiFetch(
-  path: string,
-  apiKey: string,
-  privateKey: string,
-  method = 'GET',
-  params?: Record<string, string>
-) {
+async function kalshiFetch(path: string, apiKey: string, params?: Record<string, string>) {
   const url = new URL(`${KALSHI_BASE}${path}`)
   if (params) Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v))
-
-  const ts        = Date.now()
-  const signPath  = `/trade-api/v2${path}`
-  const signature = signRequest(privateKey, ts, method, signPath)
-
   const res = await fetch(url.toString(), {
-    method,
     headers: {
-      'KALSHI-ACCESS-KEY':       apiKey,
-      'KALSHI-ACCESS-TIMESTAMP': ts.toString(),
-      'KALSHI-ACCESS-SIGNATURE': signature,
-      'Accept':                  'application/json',
-      'Content-Type':            'application/json',
+      Authorization: apiKey,
+      Accept: 'application/json',
     },
-    cache: 'no-store',
+    next: { revalidate: 0 }, // always fresh
   })
-
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText)
-    throw new Error(`Kalshi ${res.status}: ${text.slice(0, 400)}`)
+    throw new Error(`Kalshi API error ${res.status}: ${text.slice(0, 200)}`)
   }
   return res.json()
 }
 
-export async function getPortfolioBalance(apiKey: string, privateKey: string) {
-  // API returns: { balance: <cents>, portfolio_value: <cents>, ... }
-  const data = await kalshiFetch('/portfolio/balance', apiKey, privateKey)
+export async function getPortfolioBalance(apiKey: string) {
+  const data = await kalshiFetch('/portfolio/balance', apiKey)
+  const bal = data.balance ?? data
   return {
-    available_balance: (data.balance         ?? 0) / 100,
-    portfolio_value:   (data.portfolio_value ?? 0) / 100,
+    available_balance: (bal.available_balance ?? 0) / 100,
+    portfolio_value:   (bal.portfolio_value   ?? 0) / 100,
   }
 }
 
-export async function getPositions(apiKey: string, privateKey: string) {
-  const data = await kalshiFetch('/portfolio/positions', apiKey, privateKey, 'GET', { limit: '100' })
+export async function getPositions(apiKey: string) {
+  const data = await kalshiFetch('/portfolio/positions', apiKey, { count_filter: 'position', limit: '100' })
   return data.market_positions ?? data.positions ?? []
 }
 
-export async function getSettlements(apiKey: string, privateKey: string) {
-  const data = await kalshiFetch('/portfolio/settlements', apiKey, privateKey, 'GET', { limit: '100' })
+export async function getSettlements(apiKey: string) {
+  const data = await kalshiFetch('/portfolio/settlements', apiKey, { limit: '100' })
   return data.settlements ?? []
 }
