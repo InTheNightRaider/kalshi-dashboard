@@ -2,23 +2,23 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useUser, UserButton } from '@clerk/nextjs'
-import BTCChart       from '@/components/BTCChart'
-import StatsCards     from '@/components/StatsCards'
-import TradeTable     from '@/components/TradeTable'
-import Modal          from '@/components/Modal'
-import SetupCards     from '@/components/SetupCards'
-import SettingsModal  from '@/components/SettingsModal'
+import BTCChart           from '@/components/BTCChart'
+import StatsCards         from '@/components/StatsCards'
+import TradeTable         from '@/components/TradeTable'
+import Modal              from '@/components/Modal'
+import SetupCards         from '@/components/SetupCards'
+import BacktestDashboard  from '@/components/BacktestDashboard'
 
 type BotStatus = 'idle' | 'running' | 'starting' | 'stopping'
+type ActiveTab = 'live' | 'backtest'
 
 export default function DashboardPage() {
   const { isLoaded } = useUser()
+  const [activeTab, setActiveTab] = useState<ActiveTab>('live')
 
-  // ── Setup state ──────────────────────────────────────────────────────────────
+  // ── Setup state ─────────────────────────────────────────────────────────────
   const [kalshiKeySet,    setKalshiKeySet]    = useState(false)
   const [githubConnected, setGithubConnected] = useState(false)
-  const [githubUsername,  setGithubUsername]  = useState<string | null>(null)
-  const [githubRepo,      setGithubRepo]      = useState<string | null>(null)
   const [setupLoading,    setSetupLoading]    = useState(true)
 
   // ── Kalshi data ──────────────────────────────────────────────────────────────
@@ -27,22 +27,18 @@ export default function DashboardPage() {
   const [settlements, setSettlements] = useState<any[]>([])
   const [dataLoading, setDataLoading] = useState(true)
 
-  // ── Bot / UI state ───────────────────────────────────────────────────────────
-  const [botStatus,    setBotStatus]    = useState<BotStatus>('idle')
-  const [modal,        setModal]        = useState<{ type: 'success' | 'error'; message: string } | null>(null)
-  const [settingsOpen, setSettingsOpen] = useState(false)
-  const pollRef    = useRef<ReturnType<typeof setInterval> | null>(null)
-  const botPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  // ── Bot / UI state ────────────────────────────────────────────────────────────
+  const [botStatus, setBotStatus] = useState<BotStatus>('idle')
+  const [modal,     setModal]     = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+  const pollRef = useRef<ReturnType<typeof setInterval>>()
 
-  // ── Fetch setup status ───────────────────────────────────────────────────────
+  // ── Fetch setup status from Clerk metadata flags ──────────────────────────────
   const fetchSetup = useCallback(async () => {
     try {
       const res  = await fetch('/api/user')
       const data = await res.json()
       setKalshiKeySet(!!data.kalshiKeySet)
       setGithubConnected(!!data.githubConnected)
-      setGithubUsername(data.githubUsername ?? null)
-      setGithubRepo(data.githubRepo ?? null)
     } finally {
       setSetupLoading(false)
     }
@@ -50,27 +46,7 @@ export default function DashboardPage() {
 
   useEffect(() => { fetchSetup() }, [fetchSetup])
 
-  // ── Check real bot status from GitHub Actions on load + poll ─────────────────
-  const fetchBotStatus = useCallback(async () => {
-    try {
-      const res  = await fetch('/api/bot/status')
-      const data = await res.json()
-      // Only update if we're not mid-transition (starting/stopping)
-      setBotStatus(prev => {
-        if (prev === 'starting' || prev === 'stopping') return prev
-        return data.running ? 'running' : 'idle'
-      })
-    } catch { /* keep current status */ }
-  }, [])
-
-  // Poll GitHub Actions status every 15s to keep button accurate
-  useEffect(() => {
-    fetchBotStatus()
-    botPollRef.current = setInterval(fetchBotStatus, 15_000)
-    return () => { if (botPollRef.current) clearInterval(botPollRef.current) }
-  }, [fetchBotStatus])
-
-  // ── Fetch Kalshi data ────────────────────────────────────────────────────────
+  // ── Fetch Kalshi data (only once setup is done) ───────────────────────────────
   const fetchAll = useCallback(async () => {
     if (!kalshiKeySet) return
     try {
@@ -91,10 +67,10 @@ export default function DashboardPage() {
     if (!kalshiKeySet) { setDataLoading(false); return }
     fetchAll()
     pollRef.current = setInterval(fetchAll, 30_000)
-    return () => { if (pollRef.current) clearInterval(pollRef.current) }
+    return () => clearInterval(pollRef.current)
   }, [fetchAll, kalshiKeySet])
 
-  // ── Bot controls ─────────────────────────────────────────────────────────────
+  // ── Bot controls ──────────────────────────────────────────────────────────────
   const handleStart = async () => {
     setBotStatus('starting')
     try {
@@ -125,26 +101,24 @@ export default function DashboardPage() {
     }
   }
 
-  // ── Derived stats ────────────────────────────────────────────────────────────
-  const settleWins   = settlements.filter(s => (s.revenue ?? 0) > 0).length
+  // ── Derived stats ─────────────────────────────────────────────────────────────
+  const settleWins   = settlements.filter(s => (s.revenue ?? 0) > ((s.no_cost ?? 0) + (s.yes_cost ?? 0))).length
   const settleLosses = settlements.length - settleWins
   const winRate      = settlements.length > 0
     ? ((settleWins / settlements.length) * 100).toFixed(1)
     : '0.0'
+  const totalPnl     = settlements.reduce((sum, s) =>
+    sum + (s.revenue ?? 0) - (s.no_cost ?? 0) - (s.yes_cost ?? 0), 0) / 100
 
-  const totalPnl = settlements.reduce((sum, s) => {
-    const revenue = (s.revenue ?? 0) / 100
-    const cost    = parseFloat(s.no_total_cost_dollars  ?? '0')
-                  + parseFloat(s.yes_total_cost_dollars ?? '0')
-                  + parseFloat(s.fee_cost               ?? '0')
-    return sum + (revenue - cost)
-  }, 0)
+  const currentBalance  = portfolio?.available_balance ?? 0
+  const startingBalance = 50
+  const profitPct       = currentBalance > 0 && startingBalance > 0
+    ? (((currentBalance - startingBalance) / startingBalance) * 100).toFixed(1)
+    : '0.0'
 
-  const availableBalance = portfolio?.available_balance ?? 0
-  const portfolioValue   = portfolio?.portfolio_value   ?? 0
-  const setupDone        = kalshiKeySet && githubConnected
+  const setupDone = kalshiKeySet && githubConnected
 
-  // ── Status badge ─────────────────────────────────────────────────────────────
+  // ── Status badge ──────────────────────────────────────────────────────────────
   const statusColor = {
     idle:     'text-gray-500',
     running:  'text-[#00d17a]',
@@ -159,6 +133,7 @@ export default function DashboardPage() {
     stopping: '◌ STOPPING',
   }[botStatus]
 
+  // ── Loading skeleton ──────────────────────────────────────────────────────────
   if (!isLoaded || setupLoading) {
     return (
       <div className="min-h-screen bg-[#0a0b0d] flex items-center justify-center">
@@ -187,44 +162,74 @@ export default function DashboardPage() {
           </div>
           <div className="flex items-center gap-3">
             {setupDone && (
-              <>
-                <button onClick={fetchAll} className="btn-secondary text-xs py-1.5 px-3">
-                  ↻ Refresh
-                </button>
-                <button onClick={() => setSettingsOpen(true)} className="btn-secondary text-xs py-1.5 px-3">
-                  ⚙ Settings
-                </button>
-              </>
+              <button onClick={fetchAll} className="btn-secondary text-xs py-1.5 px-3">
+                ↻ Refresh
+              </button>
             )}
             <UserButton afterSignOutUrl="/sign-in" />
           </div>
         </div>
       </nav>
 
+      {/* ── Tab bar ── */}
+      <div className="border-b border-[#252c3a] bg-[#111318]/60">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex gap-1 pt-1">
+          {([['live', '● Live'], ['backtest', '⬡ Backtest']] as const).map(([tab, label]) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-all ${
+                activeTab === tab
+                  ? 'border-[#00d17a] text-[#00d17a]'
+                  : 'border-transparent text-gray-500 hover:text-gray-300'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-5">
 
+        {/* ── Backtest tab ── */}
+        {activeTab === 'backtest' && (
+          <BacktestDashboard />
+        )}
+
+        {/* ── Live tab ── */}
+        {activeTab === 'live' && (
+        <>
+
+        {/* ── Setup cards (disappear once both are configured) ── */}
         {!setupDone && (
           <>
             <div className="mb-2">
               <h2 className="text-white font-semibold text-lg">Welcome to KalshiBot</h2>
               <p className="text-gray-400 text-sm mt-1">
-                Connect your accounts below to get started.
+                Connect your accounts below to get started — these cards will disappear once everything is set up.
               </p>
             </div>
             <SetupCards
               kalshiKeySet={kalshiKeySet}
               githubConnected={githubConnected}
-              onKalshiSaved={() => { setKalshiKeySet(true); fetchAll() }}
+              onKalshiSaved={() => {
+                setKalshiKeySet(true)
+                fetchAll()
+              }}
               onGitHubSaved={() => setGithubConnected(true)}
             />
           </>
         )}
 
+        {/* ── Main dashboard (shown only when fully set up) ── */}
         {setupDone && (
           <>
+            {/* Stats */}
             <StatsCards
-              availableBalance={availableBalance}
-              portfolioValue={portfolioValue}
+              currentBalance={currentBalance}
+              startingBalance={startingBalance}
+              profitPct={profitPct}
               winRate={winRate}
               totalTrades={settlements.length}
               wins={settleWins}
@@ -242,8 +247,6 @@ export default function DashboardPage() {
                     ? 'The bot is actively trading on Kalshi markets.'
                     : botStatus === 'starting'
                     ? 'Connecting to GitHub and verifying Kalshi credentials...'
-                    : botStatus === 'stopping'
-                    ? 'Cancelling the active workflow run...'
                     : 'Start the bot to begin automated BTC/RSI trading.'}
                 </p>
               </div>
@@ -265,12 +268,7 @@ export default function DashboardPage() {
                   disabled={botStatus !== 'running'}
                   className="btn-danger min-w-[110px]"
                 >
-                  {botStatus === 'stopping' ? (
-                    <>
-                      <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      Stopping...
-                    </>
-                  ) : '■  Stop Bot'}
+                  {botStatus === 'stopping' ? 'Stopping...' : '■  Stop Bot'}
                 </button>
               </div>
             </div>
@@ -305,41 +303,4 @@ export default function DashboardPage() {
             </div>
 
             {/* Trade History */}
-            <div className="card">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold text-white">
-                  Trade History
-                  <span className="ml-2 badge-yellow">{settlements.length}</span>
-                </h3>
-              </div>
-              {dataLoading ? (
-                <div className="h-20 flex items-center justify-center text-gray-500 text-sm animate-pulse">Loading history...</div>
-              ) : settlements.length === 0 ? (
-                <div className="h-20 flex items-center justify-center text-gray-600 text-sm">No completed trades yet — start the bot to begin.</div>
-              ) : (
-                <TradeTable trades={settlements} type="closed" />
-              )}
-            </div>
-
-            <p className="text-center text-gray-700 text-xs pb-6">
-              Past performance does not guarantee future results. Trading prediction markets involves risk of loss. Not financial advice.
-            </p>
-          </>
-        )}
-      </div>
-
-      {settingsOpen && (
-        <SettingsModal
-          kalshiKeySet={kalshiKeySet}
-          githubConnected={githubConnected}
-          githubUsername={githubUsername}
-          githubRepo={githubRepo}
-          onClose={() => setSettingsOpen(false)}
-          onSaved={() => { fetchSetup(); fetchAll() }}
-        />
-      )}
-
-      {modal && <Modal type={modal.type} message={modal.message} onClose={() => setModal(null)} />}
-    </div>
-  )
-}
+            <div className="card
