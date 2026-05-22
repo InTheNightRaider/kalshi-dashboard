@@ -27,7 +27,7 @@ export default function DashboardPage() {
 
   const [botStatus, setBotStatus] = useState<BotStatus>('idle')
   const [modal,     setModal]     = useState<{ type: 'success' | 'error'; message: string } | null>(null)
-  const pollRef = useRef<ReturnType<typeof setInterval>>()
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const fetchSetup = useCallback(async () => {
     try {
