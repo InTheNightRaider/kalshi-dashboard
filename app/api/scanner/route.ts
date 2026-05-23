@@ -106,11 +106,12 @@ export async function GET() {
       const clerk = await clerkClient()
       const user  = await clerk.users.getUser(userId)
       const meta  = user.privateMetadata as Record<string, string>
-      if (meta.kalshiApiKey) {
-        const apiKey  = safeDecrypt(meta.kalshiApiKey)
-        const event   = await getCurrentBtcEvent(apiKey)
+      if (meta.kalshiApiKey && meta.kalshiPrivateKey) {
+        const keyId  = safeDecrypt(meta.kalshiApiKey)
+        const pem    = safeDecrypt(meta.kalshiPrivateKey)
+        const event  = await getCurrentBtcEvent(keyId, pem)
         if (event) {
-          const markets = await getEventMarkets(apiKey, event.event_ticker)
+          const markets = await getEventMarkets(keyId, pem, event.event_ticker)
           const mkt     = pickActiveMarket(markets)
           if (mkt) {
             const now         = Date.now()
