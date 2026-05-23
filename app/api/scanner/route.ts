@@ -1,6 +1,7 @@
 import { auth, clerkClient } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { getCurrentBtcEvent, getEventMarkets, pickActiveMarket } from '@/lib/kalshi'
+import { safeDecrypt } from '@/lib/crypto'
 
 const BINANCE = 'https://data-api.binance.vision'
 
@@ -106,9 +107,10 @@ export async function GET() {
       const user  = await clerk.users.getUser(userId)
       const meta  = user.privateMetadata as Record<string, string>
       if (meta.kalshiApiKey) {
-        const event = await getCurrentBtcEvent(meta.kalshiApiKey)
+        const apiKey  = safeDecrypt(meta.kalshiApiKey)
+        const event   = await getCurrentBtcEvent(apiKey)
         if (event) {
-          const markets = await getEventMarkets(meta.kalshiApiKey, event.event_ticker)
+          const markets = await getEventMarkets(apiKey, event.event_ticker)
           const mkt     = pickActiveMarket(markets)
           if (mkt) {
             const now         = Date.now()
