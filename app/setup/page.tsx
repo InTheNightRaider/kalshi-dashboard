@@ -4,77 +4,67 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useUser } from '@clerk/nextjs'
 
-type Step = 1 | 2 | 3
+type Step = 1 | 2 | 3 | 4
 
 export default function SetupPage() {
-  const { user, isLoaded } = useUser()
+  const { isLoaded } = useUser()
   const router = useRouter()
-  const [step, setStep]             = useState<Step>(1)
-  const [kalshiKey, setKalshiKey]   = useState('')
-  const [githubPat, setGithubPat]   = useState('')
-  const [githubUser, setGithubUser] = useState('')
-  const [saving, setSaving]         = useState(false)
-  const [error, setError]           = useState('')
-  const [checking, setChecking]     = useState(true)
+  const [step, setStep]         = useState<Step>(1)
+  const [keyId, setKeyId]       = useState('')
+  const [pem, setPem]           = useState('')
+  const [githubUser, setGitHubUser] = useState('')
+  const [githubPat, setGitHubPat]   = useState('')
+  const [saving, setSaving]     = useState(false)
+  const [error, setError]       = useState('')
+  const [checking, setChecking] = useState(true)
 
-  // Check if already configured
+  // Skip back into the dashboard if setup is already done.
   useEffect(() => {
     if (!isLoaded) return
     fetch('/api/user')
       .then(r => r.json())
-      .then(data => {
-        if (data.kalshiKeySet && data.githubConnected) {
-          router.replace('/dashboard')
-        } else if (data.kalshiKeySet) {
-          setStep(2)
-        }
+      .then(d => {
+        if (d.kalshiKeySet && d.githubConnected) router.replace('/dashboard')
+        else if (d.kalshiKeySet) setStep(2)
       })
       .catch(() => {})
       .finally(() => setChecking(false))
   }, [isLoaded, router])
 
-  const handleSaveKalshi = async (e: React.FormEvent) => {
+  const saveKalshi = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!kalshiKey.trim()) return
+    if (!keyId.trim() || !pem.trim()) return
     setSaving(true); setError('')
     try {
       const res = await fetch('/api/user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ kalshiApiKey: kalshiKey.trim() }),
+        body: JSON.stringify({ kalshiApiKey: keyId.trim(), kalshiPrivateKey: pem.trim() }),
       })
       if (!res.ok) throw new Error((await res.json()).error || 'Save failed')
       setStep(2)
-    } catch (err: any) {
-      setError(err.message)
-    } finally {
-      setSaving(false)
-    }
+    } catch (err: any) { setError(err.message) }
+    finally { setSaving(false) }
   }
 
-  const handleSaveGitHub = async (e: React.FormEvent) => {
+  const saveGitHub = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!githubPat.trim() || !githubUser.trim()) return
+    if (!githubUser.trim() || !githubPat.trim()) return
     setSaving(true); setError('')
     try {
-      // Validate the PAT by fetching user's repos
-      const repoName = 'KalshiTradingBot'
       const res = await fetch('/api/user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           githubPat:      githubPat.trim(),
           githubUsername: githubUser.trim(),
-          githubRepo:     `${githubUser.trim()}/${repoName}`,
+          githubRepo:     `${githubUser.trim()}/KalshiTradingBot`,
         }),
       })
       if (!res.ok) throw new Error((await res.json()).error || 'Save failed')
       setStep(3)
-    } catch (err: any) {
-      setError(err.message)
-    } finally {
-      setSaving(false)
-    }
+    } catch (err: any) { setError(err.message) }
+    finally { setSaving(false) }
   }
 
   if (!isLoaded || checking) {
@@ -88,145 +78,137 @@ export default function SetupPage() {
   return (
     <div className="min-h-screen bg-[#0a0b0d] flex items-center justify-center px-4 py-10">
       <div className="w-full max-w-lg">
-        {/* Brand */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center gap-2 mb-2">
-            <div className="w-8 h-8 bg-[#00d17a] rounded-lg flex items-center justify-center">
-              <svg className="w-5 h-5 text-[#0a0b0d]" fill="currentColor" viewBox="0 0 20 20">
-                <path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"/>
-              </svg>
-            </div>
-            <span className="text-xl font-bold text-white">KalshiBot</span>
-          </div>
+
+        <header className="text-center mb-8">
           <h1 className="text-2xl font-bold text-white">One-time setup</h1>
-          <p className="text-gray-400 text-sm mt-1">Connect your accounts to start trading — takes 2 minutes</p>
-        </div>
+          <p className="text-gray-400 text-sm mt-1">Connect your accounts. Keys stay on your devices — we never share them.</p>
+        </header>
 
-        {/* Progress */}
-        <div className="flex items-center mb-8">
-          {[1, 2, 3].map((s) => (
-            <div key={s} className="flex items-center flex-1">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all
-                ${step > s  ? 'bg-[#00d17a] text-[#0a0b0d]' :
-                  step === s ? 'bg-[#4f8ef7] text-white ring-4 ring-[#4f8ef7]/20' :
-                  'bg-[#252c3a] text-gray-500'}`}>
-                {step > s ? '✓' : s}
-              </div>
-              {s < 3 && <div className={`flex-1 h-px mx-2 ${step > s ? 'bg-[#00d17a]' : 'bg-[#252c3a]'}`} />}
-            </div>
-          ))}
-        </div>
+        <Progress step={step} />
 
-        {/* ── Step 1: Kalshi API Key ── */}
         {step === 1 && (
-          <div className="card">
-            <h2 className="font-semibold text-white text-lg mb-1">Step 1 — Kalshi API Key</h2>
-            <p className="text-gray-400 text-sm mb-5">
-              Get your key at{' '}
-              <a href="https://kalshi.com" target="_blank" rel="noopener noreferrer" className="text-[#4f8ef7] hover:underline">
-                kalshi.com → Settings → API
-              </a>
-            </p>
-            <form onSubmit={handleSaveKalshi} className="space-y-3">
-              <div>
-                <label className="text-xs text-gray-400 uppercase tracking-wider mb-1.5 block">API Key</label>
-                <input
-                  type="password"
-                  placeholder="Paste your Kalshi API key..."
-                  value={kalshiKey}
-                  onChange={e => setKalshiKey(e.target.value)}
-                  required
-                  className="input font-mono"
-                />
-              </div>
-              {error && <div className="bg-[#ff4d6d]/10 border border-[#ff4d6d]/30 rounded-lg px-3 py-2 text-sm text-[#ff4d6d]">{error}</div>}
+          <Card title="Step 1 — Kalshi credentials"
+            help={<>Find both at <Link href="https://kalshi.com/profile/api-access">kalshi.com → Profile → API Access</Link>. The UUID-style key ID and the RSA private key are issued together.</>}>
+            <form onSubmit={saveKalshi} className="space-y-3">
+              <Field label="Key ID (UUID)">
+                <input type="text" placeholder="e.g. 62d80886-c163-41a2-8ac2-968fc5180841"
+                  value={keyId} onChange={e => setKeyId(e.target.value)} required
+                  className="input font-mono text-xs" />
+              </Field>
+              <Field label="RSA Private Key (full PEM)">
+                <textarea
+                  placeholder={"-----BEGIN RSA PRIVATE KEY-----\nMIIEogIBAAKCAQEA...\n-----END RSA PRIVATE KEY-----"}
+                  value={pem} onChange={e => setPem(e.target.value)} required rows={6}
+                  className="input font-mono text-xs resize-none" />
+              </Field>
+              {error && <Err>{error}</Err>}
               <button type="submit" disabled={saving} className="btn-primary w-full">
-                {saving ? 'Saving...' : 'Save API Key → Continue'}
+                {saving ? 'Saving…' : 'Save credentials → Continue'}
               </button>
             </form>
-          </div>
+          </Card>
         )}
 
-        {/* ── Step 2: GitHub ── */}
         {step === 2 && (
-          <div className="card">
-            <h2 className="font-semibold text-white text-lg mb-1">Step 2 — Connect GitHub</h2>
-            <div className="bg-[#1e2330] rounded-lg p-4 mb-5 space-y-2.5">
-              <p className="text-sm text-gray-300 font-medium">First, fork the bot repo:</p>
-              {[
-                <>Go to <a href="https://github.com/InTheNightRaider/KalshiTradingBot" target="_blank" rel="noopener noreferrer" className="text-[#4f8ef7] hover:underline">github.com/InTheNightRaider/KalshiTradingBot</a></>,
-                <>Click <strong className="text-white">Fork</strong> → <strong className="text-white">Create fork</strong></>,
-                <>Then enter your GitHub info below</>,
-              ].map((item, i) => (
-                <div key={i} className="flex gap-2.5 text-sm text-gray-400">
-                  <span className="w-5 h-5 bg-[#252c3a] rounded-full flex items-center justify-center text-xs shrink-0 mt-0.5">{i+1}</span>
-                  <span>{item}</span>
-                </div>
-              ))}
-            </div>
-            <form onSubmit={handleSaveGitHub} className="space-y-3">
-              <div>
-                <label className="text-xs text-gray-400 uppercase tracking-wider mb-1.5 block">Your GitHub Username</label>
-                <input
-                  type="text"
-                  placeholder="e.g. johndoe"
-                  value={githubUser}
-                  onChange={e => setGithubUser(e.target.value)}
-                  required
-                  className="input"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-gray-400 uppercase tracking-wider mb-1.5 block">
-                  GitHub Personal Access Token{' '}
-                  <a
-                    href="https://github.com/settings/tokens/new?scopes=repo,workflow&description=KalshiBot"
-                    target="_blank" rel="noopener noreferrer"
-                    className="text-[#4f8ef7] hover:underline normal-case"
-                  >
-                    (create one here →)
-                  </a>
-                </label>
-                <input
-                  type="password"
-                  placeholder="ghp_..."
-                  value={githubPat}
-                  onChange={e => setGithubPat(e.target.value)}
-                  required
-                  className="input font-mono"
-                />
-                <p className="text-xs text-gray-500 mt-1">Needs <code className="text-[#f5c842]">repo</code> and <code className="text-[#f5c842]">workflow</code> scopes. We auto-push your Kalshi key as a GitHub Secret so the bot can trade.</p>
-              </div>
-              {error && <div className="bg-[#ff4d6d]/10 border border-[#ff4d6d]/30 rounded-lg px-3 py-2 text-sm text-[#ff4d6d]">{error}</div>}
+          <Card title="Step 2 — Connect your bot repo">
+            <ol className="bg-[#1e2330] rounded-lg p-4 mb-5 space-y-2 text-sm text-gray-300 list-decimal list-inside">
+              <li>
+                Fork the bot template:{' '}
+                <Link href="https://github.com/InTheNightRaider/KalshiTradingBot/fork">
+                  KalshiTradingBot (click to fork) →
+                </Link>
+              </li>
+              <li>
+                Create a <strong className="text-white">fine-grained</strong> Personal Access Token{' '}
+                <Link href="https://github.com/settings/personal-access-tokens/new">
+                  here →
+                </Link>
+              </li>
+              <li>
+                Repository access: <strong>Only select repositories</strong> → pick your fork.<br/>
+                Permissions: <code className="text-[#f5c842]">Contents</code>, <code className="text-[#f5c842]">Actions</code>, and <code className="text-[#f5c842]">Secrets</code> — all Read &amp; Write.
+              </li>
+            </ol>
+
+            <form onSubmit={saveGitHub} className="space-y-3">
+              <Field label="Your GitHub Username">
+                <input type="text" placeholder="e.g. johndoe"
+                  value={githubUser} onChange={e => setGitHubUser(e.target.value)} required
+                  className="input" />
+              </Field>
+              <Field label="Fine-grained PAT">
+                <input type="password" placeholder="github_pat_..."
+                  value={githubPat} onChange={e => setGitHubPat(e.target.value)} required
+                  className="input font-mono text-xs" />
+              </Field>
+              <p className="text-xs text-gray-500">The token never leaves your account. We use it only to push Kalshi secrets to your fork and trigger the workflow.</p>
+              {error && <Err>{error}</Err>}
               <button type="submit" disabled={saving} className="btn-primary w-full">
-                {saving ? 'Connecting...' : 'Connect GitHub → Continue'}
+                {saving ? 'Validating…' : 'Connect → Continue'}
               </button>
             </form>
-          </div>
+          </Card>
         )}
 
-        {/* ── Step 3: Done ── */}
         {step === 3 && (
-          <div className="card text-center py-10">
-            <div className="w-16 h-16 bg-[#00d17a]/10 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg className="w-8 h-8 text-[#00d17a]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-              </svg>
-            </div>
-            <h2 className="text-xl font-bold text-white mb-2">You're all set!</h2>
-            <p className="text-gray-400 text-sm mb-6 max-w-xs mx-auto">
-              Kalshi key saved and GitHub connected. Your bot is ready to trade.
+          <Card title="You're set!">
+            <p className="text-gray-400 text-sm mb-6 max-w-xs">
+              Credentials saved. The first time you click <strong>Start bot</strong>, the dashboard will push your Kalshi secrets into your fork (sealed-box encrypted) and dispatch the workflow. You can switch between paper and live in Settings.
             </p>
-            <button onClick={() => router.push('/dashboard')} className="btn-primary">
-              Go to Dashboard →
-            </button>
-          </div>
+            <button onClick={() => router.push('/dashboard')} className="btn-primary">Go to dashboard →</button>
+          </Card>
         )}
 
         <p className="text-center text-xs text-gray-600 mt-6">
-          Your API keys are stored securely and never shared.
+          Your API keys are AES-256 encrypted in our database. They never appear in our logs.
         </p>
       </div>
     </div>
   )
+}
+
+// ──────────────────────────────────────────────────────────────────
+function Progress({ step }: { step: number }) {
+  return (
+    <div className="flex items-center mb-8">
+      {[1, 2, 3].map(s => (
+        <div key={s} className="flex items-center flex-1">
+          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold
+            ${step > s ? 'bg-[#00d17a] text-[#0a0b0d]' :
+              step === s ? 'bg-[#4f8ef7] text-white ring-4 ring-[#4f8ef7]/20' :
+              'bg-[#252c3a] text-gray-500'}`}>
+            {step > s ? '✓' : s}
+          </div>
+          {s < 3 && <div className={`flex-1 h-px mx-2 ${step > s ? 'bg-[#00d17a]' : 'bg-[#252c3a]'}`} />}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function Card({ title, help, children }: { title: string; help?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <div className="card">
+      <h2 className="font-semibold text-white text-lg mb-1">{title}</h2>
+      {help && <p className="text-gray-400 text-sm mb-5">{help}</p>}
+      {children}
+    </div>
+  )
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="text-xs text-gray-400 uppercase tracking-wider mb-1.5 block">{label}</label>
+      {children}
+    </div>
+  )
+}
+
+function Err({ children }: { children: React.ReactNode }) {
+  return <div className="bg-[#ff4d6d]/10 border border-[#ff4d6d]/30 rounded-lg px-3 py-2 text-sm text-[#ff4d6d]">{children}</div>
+}
+
+function Link({ href, children }: { href: string; children: React.ReactNode }) {
+  return <a href={href} target="_blank" rel="noopener noreferrer" className="text-[#4f8ef7] hover:underline">{children}</a>
 }
