@@ -11,12 +11,15 @@ export async function GET() {
   const user  = await clerk.users.getUser(userId)
   const meta  = user.privateMetadata as Record<string, string>
 
-  if (!meta.kalshiApiKey) {
-    return NextResponse.json({ error: 'Kalshi API key not configured' }, { status: 400 })
+  if (!meta.kalshiApiKey || !meta.kalshiPrivateKey) {
+    return NextResponse.json({ error: 'Kalshi credentials not configured' }, { status: 400 })
   }
 
   try {
-    const data = await getPortfolioBalance(safeDecrypt(meta.kalshiApiKey))
+    const data = await getPortfolioBalance(
+      safeDecrypt(meta.kalshiApiKey),
+      safeDecrypt(meta.kalshiPrivateKey)
+    )
     return NextResponse.json(data)
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 502 })
