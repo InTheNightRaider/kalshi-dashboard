@@ -1,6 +1,7 @@
 import { auth, clerkClient } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { getLatestWorkflowRun } from '@/lib/github'
+import { safeDecrypt } from '@/lib/crypto'
 
 /**
  * GET /api/bot/status
@@ -23,9 +24,10 @@ export async function GET() {
   }
 
   const [owner, repo] = meta.githubRepo.split('/')
+  const decryptedPat  = safeDecrypt(meta.githubPat)
 
   try {
-    const run = await getLatestWorkflowRun(meta.githubPat, owner, repo)
+    const run = await getLatestWorkflowRun(decryptedPat, owner, repo)
 
     if (!run) return NextResponse.json({ status: 'idle' })
 
