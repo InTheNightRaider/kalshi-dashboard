@@ -29,7 +29,12 @@ async function kalshiFetch(
 ): Promise<any> {
   const url = new URL(`${KALSHI_BASE}${path}`)
   if (params) Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v))
-  const urlPath = url.pathname + url.search
+  // BUGFIX: signHeaders prepends API_PATH ('/trade-api/v2'). Passing
+  // url.pathname (which already starts with '/trade-api/v2') caused the
+  // signed canonical string to contain '/trade-api/v2/trade-api/v2/...'
+  // while Kalshi recomputed against the single-prefixed path → 401
+  // INCORRECT_API_KEY_SIGNATURE for every signed request.
+  const urlPath = path + url.search
   const headers = signHeaders('GET', urlPath, keyId, pem)
   const res = await fetch(url.toString(), { headers, next: { revalidate: 0 } })
   if (!res.ok) {
