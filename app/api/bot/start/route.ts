@@ -52,9 +52,31 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'githubRepo is malformed — reconnect GitHub from Settings.' }, { status: 400 })
   }
 
-  const pat      = safeDecrypt(meta.githubPat)
-  const keyId    = safeDecrypt(meta.kalshiApiKey)
-  const pem      = safeDecrypt(meta.kalshiPrivateKey)
+  function decryptField(label: string, value: string, fixHint: string): string {
+    try {
+      return safeDecrypt(value)
+    } catch (e: any) {
+      // Friendly, actionable message instead of the raw "tried 1 key" line.
+      throw new Error(
+        `${label} was encrypted with a previous ENCRYPTION_KEY and can't be decrypted now. ${fixHint}`
+      )
+    }
+  }
+  const pat   = decryptField(
+    'Your stored GitHub Personal Access Token',
+    meta.githubPat,
+    'Open ⚙ API Keys → GitHub Connection and paste a fresh PAT to re-save it under the current key.',
+  )
+  const keyId = decryptField(
+    'Your stored Kalshi Key ID',
+    meta.kalshiApiKey,
+    'Open ⚙ API Keys → Kalshi credentials and re-paste your Key ID + private key.',
+  )
+  const pem   = decryptField(
+    'Your stored Kalshi private key',
+    meta.kalshiPrivateKey,
+    'Open ⚙ API Keys → Kalshi credentials and re-paste your Key ID + private key.',
+  )
 
   // 1) PAT scope check.
   const probe = await validatePatForRepo(pat, owner, repo)
