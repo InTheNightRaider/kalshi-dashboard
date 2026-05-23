@@ -27,11 +27,19 @@ export default function DashboardPage() {
   const [positions,   setPositions]   = useState<any[]>([])
   const [settlements, setSettlements] = useState<any[]>([])
   const [dataLoading, setDataLoading] = useState(true)
+  const [dataError,   setDataError]   = useState<string | null>(null)
 
   const [botStatus, setBotStatus] = useState<BotStatus>('idle')
   const [modal,     setModal]     = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const pollRef       = useRef<ReturnType<typeof setInterval> | null>(null)
   const statusPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // ---- derived gates ----------------------------------------------------
+  // kalshiReady → user can see live data (balance, positions, scanner)
+  // botReady    → user can also dispatch the GitHub Actions bot
+  const kalshiReady = kalshiKeySet && kalshiPemSet
+  const botReady    = kalshiReady && githubConnected
+  // -----------------------------------------------------------------------
 
   const fetchBotStatus = useCallback(async () => {
     try {
@@ -46,10 +54,11 @@ export default function DashboardPage() {
   }, [])
 
   useEffect(() => {
+    if (!botReady) return
     fetchBotStatus()
     statusPollRef.current = setInterval(fetchBotStatus, 30_000)
     return () => { if (statusPollRef.current !== null) clearInterval(statusPollRef.current) }
-  }, [fetchBotStatus])
+  }, [fetchBotStatus, botReady])
 
   const fetchSetup = useCallback(async () => {
     try {
@@ -65,30 +74,38 @@ export default function DashboardPage() {
 
   useEffect(() => { fetchSetup() }, [fetchSetup])
 
-  const setupDone = kalshiKeySet && kalshiPemSet && githubConnected
-
   const fetchAll = useCallback(async () => {
-    if (!setupDone) return
+    if (!kalshiReady) return
+    setDataError(null)
     try {
       const [portRes, posRes, settRes] = await Promise.all([
         fetch('/api/kalshi/portfolio'),
         fetch('/api/kalshi/positions'),
         fetch('/api/kalshi/settlements'),
       ])
-      if (portRes.ok) setPortfolio(await portRes.json())
+      // Surface portfolio errors so the user can see what's wrong instead
+      // of silently looking at $0.00 forever.
+      if (portRes.ok) {
+        setPortfolio(await portRes.json())
+      } else {
+        const errBody = await portRes.json().catch(() => ({}))
+        setDataError(errBody.error || `Kalshi portfolio fetch failed (HTTP ${portRes.status})`)
+      }
       if (posRes.ok)  setPositions((await posRes.json()).positions ?? [])
       if (settRes.ok) setSettlements((await settRes.json()).settlements ?? [])
-    } catch { /* keep existing data */ } finally {
+    } catch (err: any) {
+      setDataError(err.message || 'Unknown fetch error')
+    } finally {
       setDataLoading(false)
     }
-  }, [setupDone])
+  }, [kalshiReady])
 
   useEffect(() => {
-    if (!setupDone) { setDataLoading(false); return }
+    if (!kalshiReady) { setDataLoading(false); return }
     fetchAll()
     pollRef.current = setInterval(fetchAll, 30_000)
     return () => { if (pollRef.current !== null) clearInterval(pollRef.current) }
-  }, [fetchAll, setupDone])
+  }, [fetchAll, kalshiReady])
 
   const handleStart = async () => {
     setBotStatus('starting')
@@ -169,14 +186,14 @@ export default function DashboardPage() {
               </svg>
             </div>
             <span className="font-bold text-white text-sm">KalshiBot</span>
-            {setupDone && (
+            {kalshiReady && (
               <span className={`text-xs font-mono font-medium px-2 py-0.5 rounded-full bg-[#1e2330] ${statusColor}`}>
                 {statusLabel}
               </span>
             )}
           </div>
           <div className="flex items-center gap-3">
-            {setupDone && (
+            {kalshiReady && (
               <>
                 <button
                   onClick={() => setShowReconnect(v => !v)}
@@ -222,29 +239,45 @@ export default function DashboardPage() {
 
         {activeTab === 'live' && (
           <>
-            {/* Reconnect panel */}
-            {showReconnect && setupDone && (
-              <KalshiReconnectCard onSaved={() => { fetchSetup(); setShowReconnect(false) }} />
+            {/* Reconnect panel (toggled from nav button) */}
+            {showReconnect && kalshiReady && (
+              <KalshiReconnectCard onSaved={() => { fetchSetup(); setShowReconnect(false); fetchAll() }} />
             )}
 
-            {!setupDone && (
+            {!kalshiReady && (
               <>
                 <div className="mb-2">
                   <h2 className="text-white font-semibold text-lg">Welcome to KalshiBot</h2>
-                  <p className="text-gray-400 text-sm mt-1">Connect your accounts below to get started.</p>
+                  <p className="text-gray-400 text-sm mt-1">Add your Kalshi credentials to see live data. GitHub is only needed to run the trading bot.</p>
                 </div>
                 <SetupCards
                   kalshiKeySet={kalshiKeySet}
                   kalshiPemSet={kalshiPemSet}
                   githubConnected={githubConnected}
-                  onKalshiSaved={() => { setKalshiKeySet(true); setKalshiPemSet(true); fetchAll() }}
-                  onGitHubSaved={() => setGithubConnected(true)}
+                  onKalshiSaved={() => { fetchSetup(); fetchAll() }}
+                  onGitHubSaved={() => { fetchSetup() }}
                 />
               </>
             )}
 
-            {setupDone && (
+            {kalshiReady && (
               <>
+                {dataError && (
+                  <div className="card border-[#ff4d6d]/40 bg-[#ff4d6d]/5">
+                    <div className="flex items-start gap-3">
+                      <div className="text-[#ff4d6d] text-lg leading-none mt-0.5">!</div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[#ff4d6d] font-semibold text-sm">Kalshi API call failed</p>
+                        <p className="text-gray-400 text-xs mt-1 font-mono break-words">{dataError}</p>
+                        <p className="text-gray-500 text-xs mt-2">
+                          This usually means the saved key+PEM don&apos;t match, or the PEM was pasted with missing line breaks.
+                          Click <span className="text-white">⚙ API Keys</span> above to re-paste them.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <StatsCards
                   currentBalance={currentBalance}
                   startingBalance={startingBalance}
@@ -257,31 +290,46 @@ export default function DashboardPage() {
                   loading={dataLoading}
                 />
 
-                <div className="card flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                  <div>
-                    <h3 className="font-semibold text-white">Bot Control</h3>
-                    <p className="text-gray-400 text-sm mt-0.5">
-                      {botStatus === 'running'
-                        ? 'The bot is actively trading on Kalshi markets.'
-                        : botStatus === 'starting'
-                        ? 'Connecting to GitHub and verifying Kalshi credentials...'
-                        : 'Start the bot to begin automated BTC/RSI trading.'}
-                    </p>
+                {!githubConnected ? (
+                  <div className="card border-[#f5c842]/30 bg-[#f5c842]/5">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                      <div>
+                        <h3 className="font-semibold text-white">Connect GitHub to enable bot trading</h3>
+                        <p className="text-gray-400 text-sm mt-0.5">
+                          Live Kalshi data above is working. To <em>run</em> the trading bot, connect a GitHub account
+                          with a fork of the bot repo &mdash; the bot runs as a GitHub Actions workflow.
+                        </p>
+                      </div>
+                      <a href="/setup" className="btn-primary shrink-0">Connect GitHub →</a>
+                    </div>
                   </div>
-                  <div className="flex gap-3 shrink-0">
-                    <button onClick={handleStart} disabled={botStatus !== 'idle'} className="btn-primary min-w-[130px]">
-                      {botStatus === 'starting' ? (
-                        <>
-                          <span className="w-4 h-4 border-2 border-[#0a0b0d] border-t-transparent rounded-full animate-spin" />
-                          Starting...
-                        </>
-                      ) : '▶  Start Bot'}
-                    </button>
-                    <button onClick={handleStop} disabled={botStatus !== 'running'} className="btn-danger min-w-[110px]">
-                      {botStatus === 'stopping' ? 'Stopping...' : '■  Stop Bot'}
-                    </button>
+                ) : (
+                  <div className="card flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div>
+                      <h3 className="font-semibold text-white">Bot Control</h3>
+                      <p className="text-gray-400 text-sm mt-0.5">
+                        {botStatus === 'running'
+                          ? 'The bot is actively trading on Kalshi markets.'
+                          : botStatus === 'starting'
+                          ? 'Connecting to GitHub and verifying Kalshi credentials...'
+                          : 'Start the bot to begin automated BTC/RSI trading.'}
+                      </p>
+                    </div>
+                    <div className="flex gap-3 shrink-0">
+                      <button onClick={handleStart} disabled={botStatus !== 'idle'} className="btn-primary min-w-[130px]">
+                        {botStatus === 'starting' ? (
+                          <>
+                            <span className="w-4 h-4 border-2 border-[#0a0b0d] border-t-transparent rounded-full animate-spin" />
+                            Starting...
+                          </>
+                        ) : '▶  Start Bot'}
+                      </button>
+                      <button onClick={handleStop} disabled={botStatus !== 'running'} className="btn-danger min-w-[110px]">
+                        {botStatus === 'stopping' ? 'Stopping...' : '■  Stop Bot'}
+                      </button>
+                    </div>
                   </div>
-                </div>
+                )}
 
                 <div className="card">
                   <div className="flex items-center justify-between mb-4">

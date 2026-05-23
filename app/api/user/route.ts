@@ -12,8 +12,11 @@ export async function GET() {
   const user  = await clerk.users.getUser(userId)
   const meta  = (user.privateMetadata ?? {}) as Record<string, string>
 
+  // Separate flags for each piece — the dashboard reads them individually
+  // so it can distinguish "missing key" vs "missing PEM" vs "no GitHub".
   return NextResponse.json({
-    kalshiKeySet:    !!meta.kalshiApiKey && !!meta.kalshiPrivateKey,
+    kalshiKeySet:    !!meta.kalshiApiKey,
+    kalshiPemSet:    !!meta.kalshiPrivateKey,
     githubConnected: !!meta.githubPat && !!meta.githubUsername,
     githubUsername:  meta.githubUsername ?? null,
     githubRepo:      meta.githubRepo ?? null,
