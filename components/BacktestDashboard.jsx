@@ -220,7 +220,7 @@ function Pagination({ page, totalPages, total, pageSize, onPage }) {
 // ─── main component ──────────────────────────────────────────────────────────
 export default function BacktestDashboard() {
   var [period, setPeriod]         = useState("30D");
-  var [mode, setMode]             = useState("m1");
+  var [mode, setMode]             = useState("m4");   // default to M4 — the headline strategy
   var [chartGroup, setChartGroup] = useState("trade");
   var [filter, setFilter]         = useState("all");
   var [page, setPage]             = useState(0);
@@ -234,7 +234,9 @@ export default function BacktestDashboard() {
 
   // ─── stats ─────────────────────────────────────────────────────────────────
   var stats = useMemo(function() {
-    if (mode === "m4") return M4_DATA[period] || null;
+    // M4: prefer the exact-period data; fall back to "All" so the chart and
+    // table never blank when the user toggles to a window M4 doesn't have.
+    if (mode === "m4") return M4_DATA[period] || M4_DATA.All || M4_DATA["10D"] || null;
     var dataKey = "mode" + mode.slice(1); // m1 -> mode1, m2 -> mode2, m3 -> mode3
     return (DATA[period] || {})[dataKey] || null;
   }, [mode, period]);
@@ -287,7 +289,7 @@ export default function BacktestDashboard() {
   // ─── trades ────────────────────────────────────────────────────────────────
   var allTrades = useMemo(function() {
     if (mode === "m4") {
-      var th = M4_TRADES[period];
+      var th = M4_TRADES[period] || M4_TRADES.All || M4_TRADES["10D"];
       return th !== undefined ? th : null;
     }
     return (TRADES[period] || {})[mode] || [];
@@ -332,12 +334,18 @@ export default function BacktestDashboard() {
             { key: "m1", label: "Mode 1 \xB7 RSI" },
             { key: "m2", label: "Mode 2 \xB7 Distance" },
             { key: "m3", label: "Mode 3 \xB7 Contra" },
-            { key: "m4", label: "Mode 4 · 7-TF" },
+            { key: "m4", label: "Mode 4 · 7-TF", featured: true },
           ].map(function(item) {
+            var isActive = mode === item.key;
+            var cls = item.featured
+              ? (isActive
+                  ? "px-3 py-1.5 rounded-md text-xs font-semibold bg-[#f5c842]/15 text-[#f5c842] border border-[#f5c842]/60 transition-all cursor-pointer"
+                  : "px-3 py-1.5 rounded-md text-xs font-semibold text-[#f5c842]/80 hover:text-[#f5c842] hover:bg-[#f5c842]/10 transition-all cursor-pointer bg-transparent border border-[#f5c842]/30")
+              : pill(isActive);
             return (
-              <button key={item.key} className={pill(mode === item.key)}
+              <button key={item.key} className={cls}
                 onClick={function() { setMode(item.key); setFilter("all"); resetPage(); }}>
-                {item.label}
+                {item.featured ? "★ " : ""}{item.label}
               </button>
             );
           })}
@@ -369,6 +377,24 @@ export default function BacktestDashboard() {
             <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">{mode === "m3" ? "Paper Bank" : "End Bank"}</p>
             <p className="text-2xl font-bold font-mono text-[#4f8ef7]">${Number(bank).toFixed(2)}</p>
           </div>
+        </div>
+      )}
+
+      {/* ── Mode 4 callout — the headline strategy ── */}
+      {mode === "m4" && stats && (
+        <div className="border-l-2 border-[#f5c842] bg-[#f5c842]/5 rounded-r-xl px-4 py-3 text-sm text-gray-300">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-[#f5c842] font-semibold">★ Mode 4 · 7-TF Confluence</span>
+            <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-[#f5c842]/15 text-[#f5c842] font-semibold">Headline strategy</span>
+          </div>
+          <p className="text-gray-400 leading-snug">
+            Enters during the 7–12 min window when 4+ of 7 timeframes (1m/3m/5m/15m/30m/1h/4h) agree on direction
+            and the contract mid is between 0.90 and 0.96. $5 flat per entry, one entry per contract.
+            <span className="text-[#f5c842] font-semibold"> {Number(stats.winRate ?? 0).toFixed(1)}% win rate</span> across
+            <span className="text-white font-semibold"> {stats.trades ?? 0} backtested trades</span> · turned
+            <span className="text-white font-semibold"> $50 → ${Number(stats.endBank ?? 0).toFixed(2)}</span>
+            (<span className="text-[#00d17a]">+{Number(stats.roi ?? 0).toFixed(1)}% ROI</span>).
+          </p>
         </div>
       )}
 
