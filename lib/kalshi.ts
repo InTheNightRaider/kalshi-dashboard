@@ -46,10 +46,14 @@ async function kalshiFetch(
 
 export async function getPortfolioBalance(keyId: string, pem: string) {
   const data = await kalshiFetch('/portfolio/balance', keyId, pem)
-  const bal = data.balance ?? data
+  // Kalshi /portfolio/balance returns top-level fields in CENTS:
+  //   { balance: 7012, portfolio_value: 0, balance_dollars: "70.1200", ... }
+  // The previous code looked for nested data.balance.available_balance which
+  // does not exist, so the dashboard always showed $0.00 even when the user
+  // had real money on Kalshi.
   return {
-    available_balance: (bal.available_balance ?? 0) / 100,
-    portfolio_value:   (bal.portfolio_value   ?? 0) / 100,
+    available_balance: (data.balance ?? 0) / 100,
+    portfolio_value:   (data.portfolio_value ?? 0) / 100,
   }
 }
 
