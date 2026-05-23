@@ -5,6 +5,7 @@ import { getLatestWorkflowRun, cancelWorkflowRun } from '@/lib/github'
 import { safeDecrypt } from '@/lib/crypto'
 
 export async function POST(request: Request) {
+  try {
   const csrf = checkCsrf(request); if (csrf) return csrf
 
   const { userId } = await auth()
@@ -36,5 +37,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 502 })
+  }
+  } catch (err: any) {
+    return NextResponse.json({
+      error: `Stop failed: ${err?.message || String(err)}`,
+    }, { status: 500 })
   }
 }
