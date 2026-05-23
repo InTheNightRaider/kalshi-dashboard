@@ -8,6 +8,7 @@ import TradeTable         from '@/components/TradeTable'
 import Modal              from '@/components/Modal'
 import SetupCards, { KalshiReconnectCard } from '@/components/SetupCards'
 import BacktestDashboard  from '@/components/BacktestDashboard'
+import SettingsModal      from '@/components/SettingsModal'
 import ScanSnapshot       from '@/components/ScanSnapshot'
 
 type BotStatus = 'idle' | 'running' | 'starting' | 'stopping'
@@ -20,6 +21,8 @@ export default function DashboardPage() {
   const [kalshiKeySet,    setKalshiKeySet]    = useState(false)
   const [kalshiPemSet,    setKalshiPemSet]    = useState(false)
   const [githubConnected, setGithubConnected] = useState(false)
+  const [githubUsername,  setGithubUsername]  = useState<string | null>(null)
+  const [githubRepo,      setGithubRepo]      = useState<string | null>(null)
   const [setupLoading,    setSetupLoading]    = useState(true)
   const [showReconnect,   setShowReconnect]   = useState(false)
 
@@ -67,6 +70,8 @@ export default function DashboardPage() {
       setKalshiKeySet(!!data.kalshiKeySet)
       setKalshiPemSet(!!data.kalshiPemSet)
       setGithubConnected(!!data.githubConnected)
+      setGithubUsername(data.githubUsername ?? null)
+      setGithubRepo(data.githubRepo ?? null)
     } finally {
       setSetupLoading(false)
     }
@@ -239,9 +244,10 @@ export default function DashboardPage() {
 
         {activeTab === 'live' && (
           <>
-            {/* Reconnect panel (toggled from nav button) */}
+            {/* Reconnect panel — Kalshi-only inline card (kept for the
+                quick first-touch reconnect that the live page surfaces). */}
             {showReconnect && kalshiReady && (
-              <KalshiReconnectCard onSaved={() => { fetchSetup(); setShowReconnect(false); fetchAll() }} />
+              <KalshiReconnectCard onSaved={() => { fetchSetup(); fetchAll() }} />
             )}
 
             {!kalshiReady && (
@@ -386,6 +392,16 @@ export default function DashboardPage() {
 
       </div>
 
+      {showReconnect && (
+        <SettingsModal
+          kalshiKeySet={kalshiKeySet}
+          githubConnected={githubConnected}
+          githubUsername={githubUsername}
+          githubRepo={githubRepo}
+          onClose={() => setShowReconnect(false)}
+          onSaved={() => { fetchSetup(); fetchAll() }}
+        />
+      )}
       {modal && <Modal type={modal.type} message={modal.message} onClose={() => setModal(null)} />}
     </div>
   )
