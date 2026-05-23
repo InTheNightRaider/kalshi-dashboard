@@ -1,8 +1,9 @@
 import { auth, clerkClient } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
-import { checkCsrf } from '@/lib/csrf'
+import { createPrivateKey } from 'crypto'
 import { getGitHubUser } from '@/lib/github'
-import { encrypt } from '@/lib/crypto'
+import { encrypt, safeDecrypt, DecryptionFailedError } from '@/lib/crypto'
+import { getPortfolioBalance } from '@/lib/kalshi'
 
 export async function GET() {
   const { userId } = await auth()
@@ -12,8 +13,6 @@ export async function GET() {
   const user  = await clerk.users.getUser(userId)
   const meta  = (user.privateMetadata ?? {}) as Record<string, string>
 
-  // Separate flags for each piece — the dashboard reads them individually
-  // so it can distinguish "missing key" vs "missing PEM" vs "no GitHub".
   return NextResponse.json({
     kalshiKeySet:    !!meta.kalshiApiKey,
     kalshiPemSet:    !!meta.kalshiPrivateKey,
@@ -24,32 +23,103 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const csrf = checkCsrf(request); if (csrf) return csrf
-
   const { userId } = await auth()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body  = await request.json()
   const clerk = await clerkClient()
+
+  const existingUser = await clerk.users.getUser(userId)
+  const existingMeta = (existingUser.privateMetadata ?? {}) as Record<string, string>
+
   const update: Record<string, string> = {}
 
+  let pendingKeyId: string | null = null
+  let pendingPem:   string | null = null
+
   if (body.kalshiApiKey) {
-    update.kalshiApiKey = encrypt(body.kalshiApiKey.trim())
+    pendingKeyId = String(body.kalshiApiKey).trim()
+    if (pendingKeyId.length < 16 || /\s/.test(pendingKeyId)) {
+      return NextResponse.json({
+        error: 'Key ID looks malformed. It should be a UUID like 62d80886-c163-41a2-8ac2-968fc5180841.',
+      }, { status: 400 })
+    }
   }
 
   if (body.kalshiPrivateKey) {
-    update.kalshiPrivateKey = encrypt(body.kalshiPrivateKey.trim())
+    pendingPem = String(body.kalshiPrivateKey).trim()
+    if (!pendingPem.includes('-----BEGIN') || !pendingPem.includes('PRIVATE KEY') || !pendingPem.includes('-----END')) {
+      return NextResponse.json({
+        error: 'kalshiPrivateKey must be a full PEM including both -----BEGIN ... PRIVATE KEY----- and -----END ... PRIVATE KEY----- lines.',
+      }, { status: 400 })
+    }
+    try {
+      createPrivateKey(pendingPem)
+    } catch (e: any) {
+      return NextResponse.json({
+        error: `RSA private key failed to parse: ${e.message}. The PEM may have been pasted with mangled line breaks or character corruption.`,
+      }, { status: 400 })
+    }
+  }
+
+  if (pendingKeyId || pendingPem) {
+    let keyIdForCheck: string | null = null
+    let pemForCheck:   string | null = null
+
+    try {
+      keyIdForCheck = pendingKeyId ?? (existingMeta.kalshiApiKey      ? safeDecrypt(existingMeta.kalshiApiKey)      : null)
+      pemForCheck   = pendingPem   ?? (existingMeta.kalshiPrivateKey  ? safeDecrypt(existingMeta.kalshiPrivateKey)  : null)
+    } catch (e) {
+      if (e instanceof DecryptionFailedError) {
+        return NextResponse.json({
+          error: 'Your previously stored Kalshi credentials can no longer be decrypted (ENCRYPTION_KEY likely rotated). Please re-paste BOTH the Key ID and the private key together.',
+        }, { status: 400 })
+      }
+      throw e
+    }
+
+    if (!keyIdForCheck || !pemForCheck) {
+      return NextResponse.json({
+        error: 'Both Key ID and private key are required for the initial Kalshi save.',
+      }, { status: 400 })
+    }
+
+    try {
+      await getPortfolioBalance(keyIdForCheck, pemForCheck)
+    } catch (e: any) {
+      const msg = String(e?.message ?? e)
+      if (msg.includes('INCORRECT_API_KEY_SIGNATURE') || msg.includes(' 401')) {
+        return NextResponse.json({
+          error: 'Kalshi rejected the Key ID + private key pair (INCORRECT_API_KEY_SIGNATURE). They belong to different API keys, or one of them has a typo. Re-copy both from Kalshi -> Profile -> API Access and paste them again.',
+        }, { status: 400 })
+      }
+      return NextResponse.json({
+        error: `Live Kalshi check failed before save: ${msg.slice(0, 300)}`,
+      }, { status: 400 })
+    }
+
+    if (pendingKeyId) update.kalshiApiKey     = encrypt(pendingKeyId)
+    if (pendingPem)   update.kalshiPrivateKey = encrypt(pendingPem)
   }
 
   if (body.githubPat) {
     try {
       const login = await getGitHubUser(body.githubPat)
-      update.githubPat      = encrypt(body.githubPat.trim())
+      if (body.githubUsername && login.toLowerCase() !== body.githubUsername.toLowerCase()) {
+        return NextResponse.json({
+          error: `PAT belongs to GitHub user "${login}" but you entered "${body.githubUsername}". Use the correct username.`
+        }, { status: 400 })
+      }
+      update.githubPat      = encrypt(String(body.githubPat).trim())
       update.githubUsername = login
       update.githubRepo     = body.githubRepo ?? `${login}/KalshiTradingBot`
     } catch (err: any) {
       return NextResponse.json({ error: `GitHub validation failed: ${err.message}` }, { status: 400 })
     }
+  }
+
+  if (Object.keys(update).length === 0) {
+    return NextResponse.json({ error: 'No fields to update.' }, { status: 400 })
   }
 
   await clerk.users.updateUserMetadata(userId, { privateMetadata: update })
