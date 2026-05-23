@@ -15,7 +15,7 @@
     "recharts": "^2.12.7",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "libsodium-wrappers": "^0.7.13"
+    "libsodium-wrappers": "0.7.15"
   },
   "devDependencies": {
     "@netlify/plugin-nextjs": "^5.9.0",
