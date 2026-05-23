@@ -19,6 +19,7 @@ import { safeDecrypt } from '@/lib/crypto'
  * so it can't be tripped from a random fetch call.
  */
 export async function POST(request: Request) {
+  try {
   const csrf = checkCsrf(request); if (csrf) return csrf
 
   const { userId } = await auth()
@@ -91,4 +92,12 @@ export async function POST(request: Request) {
   } catch { /* ignore — Kalshi sometimes flakes; don't fail the start */ }
 
   return NextResponse.json({ ok: true, mode, balance, portfolioValue })
+  } catch (err: any) {
+    // Defensive: any uncaught throw (e.g. safeDecrypt on a stale credential)
+    // would otherwise become an empty 500 and the frontend would show
+    // "Failed to execute 'json' on 'Response': Unexpected end of JSON input".
+    return NextResponse.json({
+      error: `Start failed: ${err?.message || String(err)}`,
+    }, { status: 500 })
+  }
 }
