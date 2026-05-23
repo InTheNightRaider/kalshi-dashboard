@@ -6,7 +6,7 @@ import BTCChart           from '@/components/BTCChart'
 import StatsCards         from '@/components/StatsCards'
 import TradeTable         from '@/components/TradeTable'
 import Modal              from '@/components/Modal'
-import SetupCards         from '@/components/SetupCards'
+import SetupCards, { KalshiReconnectCard } from '@/components/SetupCards'
 import BacktestDashboard  from '@/components/BacktestDashboard'
 import ScanSnapshot       from '@/components/ScanSnapshot'
 
@@ -18,8 +18,10 @@ export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('live')
 
   const [kalshiKeySet,    setKalshiKeySet]    = useState(false)
+  const [kalshiPemSet,    setKalshiPemSet]    = useState(false)
   const [githubConnected, setGithubConnected] = useState(false)
   const [setupLoading,    setSetupLoading]    = useState(true)
+  const [showReconnect,   setShowReconnect]   = useState(false)
 
   const [portfolio,   setPortfolio]   = useState<any>(null)
   const [positions,   setPositions]   = useState<any[]>([])
@@ -31,7 +33,6 @@ export default function DashboardPage() {
   const pollRef       = useRef<ReturnType<typeof setInterval> | null>(null)
   const statusPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // Sync badge with real GitHub Actions state
   const fetchBotStatus = useCallback(async () => {
     try {
       const res  = await fetch('/api/bot/status')
@@ -55,6 +56,7 @@ export default function DashboardPage() {
       const res  = await fetch('/api/user')
       const data = await res.json()
       setKalshiKeySet(!!data.kalshiKeySet)
+      setKalshiPemSet(!!data.kalshiPemSet)
       setGithubConnected(!!data.githubConnected)
     } finally {
       setSetupLoading(false)
@@ -63,8 +65,10 @@ export default function DashboardPage() {
 
   useEffect(() => { fetchSetup() }, [fetchSetup])
 
+  const setupDone = kalshiKeySet && kalshiPemSet && githubConnected
+
   const fetchAll = useCallback(async () => {
-    if (!kalshiKeySet) return
+    if (!setupDone) return
     try {
       const [portRes, posRes, settRes] = await Promise.all([
         fetch('/api/kalshi/portfolio'),
@@ -77,14 +81,14 @@ export default function DashboardPage() {
     } catch { /* keep existing data */ } finally {
       setDataLoading(false)
     }
-  }, [kalshiKeySet])
+  }, [setupDone])
 
   useEffect(() => {
-    if (!kalshiKeySet) { setDataLoading(false); return }
+    if (!setupDone) { setDataLoading(false); return }
     fetchAll()
     pollRef.current = setInterval(fetchAll, 30_000)
     return () => { if (pollRef.current !== null) clearInterval(pollRef.current) }
-  }, [fetchAll, kalshiKeySet])
+  }, [fetchAll, setupDone])
 
   const handleStart = async () => {
     setBotStatus('starting')
@@ -131,8 +135,6 @@ export default function DashboardPage() {
     ? ((settleWins / settlements.length) * 100).toFixed(1)
     : '0.0'
 
-  const setupDone = kalshiKeySet && githubConnected
-
   const statusColor = {
     idle:     'text-gray-500',
     running:  'text-[#00d17a]',
@@ -175,9 +177,18 @@ export default function DashboardPage() {
           </div>
           <div className="flex items-center gap-3">
             {setupDone && (
-              <button onClick={fetchAll} className="btn-secondary text-xs py-1.5 px-3">
-                &#8635; Refresh
-              </button>
+              <>
+                <button
+                  onClick={() => setShowReconnect(v => !v)}
+                  className="btn-secondary text-xs py-1.5 px-3"
+                  title="Update Kalshi API credentials"
+                >
+                  ⚙ API Keys
+                </button>
+                <button onClick={fetchAll} className="btn-secondary text-xs py-1.5 px-3">
+                  &#8635; Refresh
+                </button>
+              </>
             )}
             <UserButton afterSignOutUrl="/sign-in" />
           </div>
@@ -189,9 +200,7 @@ export default function DashboardPage() {
           <button
             onClick={() => setActiveTab('live')}
             className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-all ${
-              activeTab === 'live'
-                ? 'border-[#00d17a] text-[#00d17a]'
-                : 'border-transparent text-gray-500 hover:text-gray-300'
+              activeTab === 'live' ? 'border-[#00d17a] text-[#00d17a]' : 'border-transparent text-gray-500 hover:text-gray-300'
             }`}
           >
             &#9679; Live
@@ -199,9 +208,7 @@ export default function DashboardPage() {
           <button
             onClick={() => setActiveTab('backtest')}
             className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-all ${
-              activeTab === 'backtest'
-                ? 'border-[#00d17a] text-[#00d17a]'
-                : 'border-transparent text-gray-500 hover:text-gray-300'
+              activeTab === 'backtest' ? 'border-[#00d17a] text-[#00d17a]' : 'border-transparent text-gray-500 hover:text-gray-300'
             }`}
           >
             &#9650; Backtest
@@ -215,18 +222,22 @@ export default function DashboardPage() {
 
         {activeTab === 'live' && (
           <>
+            {/* Reconnect panel */}
+            {showReconnect && setupDone && (
+              <KalshiReconnectCard onSaved={() => { fetchSetup(); setShowReconnect(false) }} />
+            )}
+
             {!setupDone && (
               <>
                 <div className="mb-2">
                   <h2 className="text-white font-semibold text-lg">Welcome to KalshiBot</h2>
-                  <p className="text-gray-400 text-sm mt-1">
-                    Connect your accounts below to get started.
-                  </p>
+                  <p className="text-gray-400 text-sm mt-1">Connect your accounts below to get started.</p>
                 </div>
                 <SetupCards
                   kalshiKeySet={kalshiKeySet}
+                  kalshiPemSet={kalshiPemSet}
                   githubConnected={githubConnected}
-                  onKalshiSaved={() => { setKalshiKeySet(true); fetchAll() }}
+                  onKalshiSaved={() => { setKalshiKeySet(true); setKalshiPemSet(true); fetchAll() }}
                   onGitHubSaved={() => setGithubConnected(true)}
                 />
               </>
