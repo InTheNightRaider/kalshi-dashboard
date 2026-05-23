@@ -4,26 +4,30 @@ import { useState } from 'react'
 
 type Props = {
   kalshiKeySet:    boolean
+  kalshiPemSet:    boolean
   githubConnected: boolean
   onKalshiSaved:  () => void
   onGitHubSaved:  () => void
 }
 
-function KalshiCard({ onSaved }: { onSaved: () => void }) {
-  const [apiKey,  setApiKey]  = useState('')
-  const [privKey, setPrivKey] = useState('')
+function KalshiCard({ onSaved, isUpdate }: { onSaved: () => void; isUpdate?: boolean }) {
+  const [keyId,   setKeyId]   = useState('')
+  const [pem,     setPem]     = useState('')
   const [saving,  setSaving]  = useState(false)
   const [error,   setError]   = useState('')
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!apiKey.trim() || !privKey.trim()) return
+    if (!keyId.trim() || !pem.trim()) return
     setSaving(true); setError('')
     try {
       const res = await fetch('/api/user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ kalshiApiKey: apiKey.trim(), kalshiPrivateKey: privKey.trim() }),
+        body: JSON.stringify({
+          kalshiApiKey:     keyId.trim(),
+          kalshiPrivateKey: pem.trim(),
+        }),
       })
       if (!res.ok) throw new Error((await res.json()).error || 'Failed to save')
       onSaved()
@@ -42,46 +46,48 @@ function KalshiCard({ onSaved }: { onSaved: () => void }) {
           </svg>
         </div>
         <div>
-          <h3 className="font-semibold text-white">Connect your Kalshi account</h3>
+          <h3 className="font-semibold text-white">
+            {isUpdate ? 'Update Kalshi credentials' : 'Connect your Kalshi account'}
+          </h3>
           <p className="text-gray-400 text-sm mt-0.5">
-            Get both keys at{' '}
-            <a href="https://kalshi.com" target="_blank" rel="noopener noreferrer" className="text-[#4f8ef7] hover:underline">
-              kalshi.com → Settings → API
+            Get your Key ID and download your private key at{' '}
+            <a href="https://kalshi.com/profile/api-access" target="_blank" rel="noopener noreferrer"
+               className="text-[#4f8ef7] hover:underline">
+              kalshi.com → Profile → API Access
             </a>
           </p>
         </div>
       </div>
       <form onSubmit={handleSubmit} className="space-y-3">
         <div>
-          <label className="text-xs text-gray-400 mb-1 block">API Key</label>
+          <label className="block text-gray-400 text-xs mb-1">Key ID <span className="text-gray-600">(UUID from Kalshi)</span></label>
           <input
-            type="password"
-            placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-            value={apiKey}
-            onChange={e => setApiKey(e.target.value)}
+            type="text"
+            placeholder="e.g. e2475509-4a0c-4beb-9d45-be55a920d057"
+            value={keyId}
+            onChange={e => setKeyId(e.target.value)}
             required
             className="input w-full font-mono text-xs"
           />
         </div>
         <div>
-          <label className="text-xs text-gray-400 mb-1 block">RSA Private Key <span className="text-gray-600">(PEM format)</span></label>
+          <label className="block text-gray-400 text-xs mb-1">RSA Private Key <span className="text-gray-600">(paste full PEM content)</span></label>
           <textarea
             placeholder={"-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA...\n-----END RSA PRIVATE KEY-----"}
-            value={privKey}
-            onChange={e => setPrivKey(e.target.value)}
+            value={pem}
+            onChange={e => setPem(e.target.value)}
             required
             rows={5}
             className="input w-full font-mono text-xs resize-none"
-            style={{ lineHeight: '1.4' }}
           />
         </div>
-        <button type="submit" disabled={saving || !apiKey.trim() || !privKey.trim()} className="btn-primary w-full">
+        <button type="submit" disabled={saving || !keyId.trim() || !pem.trim()} className="btn-primary w-full">
           {saving ? (
             <span className="flex items-center justify-center gap-2">
               <span className="w-4 h-4 border-2 border-[#0a0b0d] border-t-transparent rounded-full animate-spin" />
-              Connecting...
+              Saving...
             </span>
-          ) : 'Connect Kalshi →'}
+          ) : isUpdate ? 'Update credentials' : 'Connect Kalshi'}
         </button>
       </form>
       {error && <p className="text-[#ff4d6d] text-xs mt-2">{error}</p>}
@@ -106,14 +112,15 @@ function GitHubCard({ onSaved }: { onSaved: () => void }) {
     if (!pat.trim()) return
     setLoading(true); setError(''); setRepos([]); setSelected(null)
     try {
-      const res  = await fetch('/api/github/repos', {
+      const res = await fetch('/api/github/repos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pat: pat.trim() }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
-      setLogin(data.login); setRepos(data.repos)
+      setLogin(data.login)
+      setRepos(data.repos)
     } catch (err: any) {
       setError(err.message)
     } finally {
@@ -195,7 +202,7 @@ function GitHubCard({ onSaved }: { onSaved: () => void }) {
                 <span className="text-[10px] text-[#00d17a] uppercase tracking-wider font-medium">Suggested</span>
               </div>
             )}
-            {[...suggested, ...(suggested.length > 0 && rest.length > 0 ? [null] : []), ...rest].map((r) => {
+            {[...suggested, ...(suggested.length > 0 && rest.length > 0 ? [null] : []), ...rest].map((r, i) => {
               if (r === null) return (
                 <div key="divider" className="px-3 py-1.5 bg-[#111318]">
                   <span className="text-[10px] text-gray-600 uppercase tracking-wider">All repos</span>
@@ -216,7 +223,9 @@ function GitHubCard({ onSaved }: { onSaved: () => void }) {
                 </button>
               )
             })}
-            {filtered.length === 0 && <div className="px-4 py-6 text-center text-gray-500 text-sm">No repos match</div>}
+            {filtered.length === 0 && (
+              <div className="px-4 py-6 text-center text-gray-500 text-sm">No repos match &ldquo;{filter}&rdquo;</div>
+            )}
           </div>
           {selected && (
             <div className="flex items-center gap-3 pt-1">
@@ -233,12 +242,19 @@ function GitHubCard({ onSaved }: { onSaved: () => void }) {
   )
 }
 
-export default function SetupCards({ kalshiKeySet, githubConnected, onKalshiSaved, onGitHubSaved }: Props) {
-  if (kalshiKeySet && githubConnected) return null
+export default function SetupCards({ kalshiKeySet, kalshiPemSet, githubConnected, onKalshiSaved, onGitHubSaved }: Props) {
+  const kalshiDone = kalshiKeySet && kalshiPemSet
+
+  if (kalshiDone && githubConnected) return null
+
   return (
     <div className="space-y-3">
-      {!kalshiKeySet    && <KalshiCard onSaved={onKalshiSaved} />}
+      {!kalshiDone    && <KalshiCard onSaved={onKalshiSaved} />}
       {!githubConnected && <GitHubCard onSaved={onGitHubSaved} />}
     </div>
   )
+}
+
+export function KalshiReconnectCard({ onSaved }: { onSaved: () => void }) {
+  return <KalshiCard onSaved={onSaved} isUpdate />
 }
