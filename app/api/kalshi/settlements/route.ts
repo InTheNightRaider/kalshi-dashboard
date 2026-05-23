@@ -11,12 +11,12 @@ export async function GET() {
   const user  = await clerk.users.getUser(userId)
   const meta  = user.privateMetadata as Record<string, string>
 
-  if (!meta.kalshiApiKey || !meta.kalshiPrivateKey) {
+  if (!meta.kalshiApiKey) {
     return NextResponse.json({ settlements: [] })
   }
 
   try {
-    const settlements = await getSettlements(safeDecrypt(meta.kalshiApiKey), safeDecrypt(meta.kalshiPrivateKey))
+    const settlements = await getSettlements(safeDecrypt(meta.kalshiApiKey))
     return NextResponse.json({ settlements })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 502 })
