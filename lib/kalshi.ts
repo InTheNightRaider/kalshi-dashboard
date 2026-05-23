@@ -35,3 +35,32 @@ export async function getSettlements(apiKey: string) {
   const data = await kalshiFetch('/portfolio/settlements', apiKey, { limit: '100' })
   return data.settlements ?? []
 }
+
+/** Fetch the current open KXBTCD event */
+export async function getCurrentBtcEvent(apiKey: string) {
+  const data = await kalshiFetch('/events', apiKey, {
+    series_ticker: 'KXBTCD',
+    status: 'open',
+    limit: '5',
+  })
+  const events = data.events ?? []
+  return events[0] ?? null
+}
+
+/** Fetch markets for an event ticker */
+export async function getEventMarkets(apiKey: string, eventTicker: string) {
+  const data = await kalshiFetch('/markets', apiKey, {
+    event_ticker: eventTicker,
+    limit: '200',
+  })
+  return data.markets ?? []
+}
+
+/** Find the single "active" 15-min contract — closest close_time in the future */
+export function pickActiveMarket(markets: any[]): any | null {
+  const now = Date.now()
+  const upcoming = markets
+    .filter(m => m.status === 'active' && new Date(m.close_time).getTime() > now)
+    .sort((a, b) => new Date(a.close_time).getTime() - new Date(b.close_time).getTime())
+  return upcoming[0] ?? null
+}
