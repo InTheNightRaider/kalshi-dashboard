@@ -2,6 +2,7 @@ import { auth, clerkClient } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { dispatchBotWorkflow } from '@/lib/github'
 import { getPortfolioBalance } from '@/lib/kalshi'
+import { safeDecrypt } from '@/lib/crypto'
 
 export async function POST() {
   const { userId } = await auth()
@@ -19,13 +20,15 @@ export async function POST() {
   }
 
   const [owner, repo] = meta.githubRepo.split('/')
+  const decryptedPat     = safeDecrypt(meta.githubPat)
+  const decryptedApiKey  = safeDecrypt(meta.kalshiApiKey)
 
   try {
     // 1. Trigger GitHub Actions workflow dispatch
-    await dispatchBotWorkflow(meta.githubPat, owner, repo)
+    await dispatchBotWorkflow(decryptedPat, owner, repo)
 
     // 2. Fetch live portfolio balance from Kalshi to confirm connection
-    const portfolio = await getPortfolioBalance(meta.kalshiApiKey)
+    const portfolio = await getPortfolioBalance(decryptedApiKey)
 
     return NextResponse.json({
       ok: true,
