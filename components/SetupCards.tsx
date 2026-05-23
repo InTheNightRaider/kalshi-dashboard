@@ -11,10 +11,26 @@ type Props = {
 }
 
 function KalshiCard({ onSaved, isUpdate }: { onSaved: () => void; isUpdate?: boolean }) {
-  const [keyId,   setKeyId]   = useState('')
-  const [pem,     setPem]     = useState('')
-  const [saving,  setSaving]  = useState(false)
-  const [error,   setError]   = useState('')
+  const [keyId,    setKeyId]    = useState('')
+  const [pem,      setPem]      = useState('')
+  const [saving,   setSaving]   = useState(false)
+  const [error,    setError]    = useState('')
+  const [fileName, setFileName] = useState('')
+
+  // Reading the PEM via FileReader sidesteps every form of clipboard
+  // corruption (invisible Unicode, line-ending swaps, smart-quote substitution)
+  // that can sneak in when pasting through a browser textarea. The file bytes
+  // go to the server exactly as written on disk.
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0]
+    if (!f) return
+    setFileName(f.name)
+    setError('')
+    const reader = new FileReader()
+    reader.onload  = () => setPem(String(reader.result ?? ''))
+    reader.onerror = () => setError('Could not read file: ' + (reader.error?.message ?? 'unknown error'))
+    reader.readAsText(f)
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -71,11 +87,24 @@ function KalshiCard({ onSaved, isUpdate }: { onSaved: () => void; isUpdate?: boo
           />
         </div>
         <div>
-          <label className="block text-gray-400 text-xs mb-1">RSA Private Key <span className="text-gray-600">(paste full PEM content)</span></label>
+          <label className="block text-gray-400 text-xs mb-1">
+            RSA Private Key <span className="text-gray-600">(upload the .pem file — paste is unreliable)</span>
+          </label>
+          <div className="flex items-center gap-2 mb-2">
+            <label className="btn-secondary cursor-pointer shrink-0 text-xs">
+              Choose .pem file
+              <input type="file" accept=".pem,.key,.txt" onChange={handleFile} className="hidden" />
+            </label>
+            {fileName && (
+              <span className="text-xs text-[#00d17a] font-mono truncate" title={fileName}>
+                ✓ {fileName} ({pem.length} bytes)
+              </span>
+            )}
+          </div>
           <textarea
-            placeholder={"-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA...\n-----END RSA PRIVATE KEY-----"}
+            placeholder={"...or paste the full PEM here (Choose .pem file is more reliable)\n\n-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA...\n-----END RSA PRIVATE KEY-----"}
             value={pem}
-            onChange={e => setPem(e.target.value)}
+            onChange={e => { setPem(e.target.value); setFileName('') }}
             required
             rows={5}
             className="input w-full font-mono text-xs resize-none"

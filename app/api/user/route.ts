@@ -1,9 +1,21 @@
 import { auth, clerkClient } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
-import { createPrivateKey } from 'crypto'
+import { createPrivateKey, createPublicKey, createHash } from 'crypto'
 import { getGitHubUser } from '@/lib/github'
 import { encrypt, safeDecrypt, DecryptionFailedError } from '@/lib/crypto'
 import { getPortfolioBalance } from '@/lib/kalshi'
+
+/**
+ * SHA-256 fingerprint of the public key derived from a private-key PEM.
+ * Lets us prove byte-equivalence between the PEM the dashboard received
+ * and a known-good file the user can fingerprint locally — without
+ * exposing the private key itself.
+ */
+function publicKeyFingerprint(pem: string): string {
+  const priv = createPrivateKey(pem)
+  const pub  = createPublicKey(priv).export({ type: 'spki', format: 'der' }) as Buffer
+  return createHash('sha256').update(pub).digest('hex')
+}
 
 export async function GET() {
   const { userId } = await auth()
@@ -89,8 +101,17 @@ export async function POST(request: Request) {
     } catch (e: any) {
       const msg = String(e?.message ?? e)
       if (msg.includes('INCORRECT_API_KEY_SIGNATURE') || msg.includes(' 401')) {
+        // Compute the fingerprint of the public key that the *received* PEM
+        // produces. The user can compare this to the known-good file's
+        // fingerprint to prove whether bytes survived the round trip.
+        let fp = 'unavailable'
+        try { fp = publicKeyFingerprint(pemForCheck) } catch {}
         return NextResponse.json({
-          error: 'Kalshi rejected the Key ID + private key pair (INCORRECT_API_KEY_SIGNATURE). They belong to different API keys, or one of them has a typo. Re-copy both from Kalshi -> Profile -> API Access and paste them again.',
+          error:
+            'Kalshi rejected the Key ID + private key pair (INCORRECT_API_KEY_SIGNATURE). ' +
+            `keyId="${keyIdForCheck}" pem_length=${pemForCheck.length} pubkey_sha256=${fp.slice(0, 16)}… ` +
+            'If your local file fingerprint differs, the upload/paste corrupted the bytes — use "Choose .pem file" instead of pasting. ' +
+            'If the fingerprints match, the key_id belongs to a different RSA key than this PEM — generate a fresh pair at kalshi.com → Profile → API Access.',
         }, { status: 400 })
       }
       return NextResponse.json({
