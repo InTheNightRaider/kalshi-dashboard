@@ -220,7 +220,7 @@ function Pagination({ page, totalPages, total, pageSize, onPage }) {
 // ─── main component ──────────────────────────────────────────────────────────
 export default function BacktestDashboard() {
   var [period, setPeriod]         = useState("30D");
-  var [mode, setMode]             = useState("m4");   // default to M4 — the headline strategy
+  var [mode, setMode]             = useState("m1");
   var [chartGroup, setChartGroup] = useState("trade");
   var [filter, setFilter]         = useState("all");
   var [page, setPage]             = useState(0);
@@ -234,9 +234,12 @@ export default function BacktestDashboard() {
 
   // ─── stats ─────────────────────────────────────────────────────────────────
   var stats = useMemo(function() {
-    // M4: prefer the exact-period data; fall back to "All" so the chart and
-    // table never blank when the user toggles to a window M4 doesn't have.
-    if (mode === "m4") return M4_DATA[period] || M4_DATA.All || M4_DATA["10D"] || null;
+    if (mode === "m4") {
+      // Mode 4 has only 51 trades all within ~10 days, so every threshold
+      // window contains the full dataset. Fall back to "All" (then 10D) when
+      // the period-specific bucket wasn't pre-populated.
+      return M4_DATA[period] || M4_DATA["All"] || M4_DATA["10D"] || null;
+    }
     var dataKey = "mode" + mode.slice(1); // m1 -> mode1, m2 -> mode2, m3 -> mode3
     return (DATA[period] || {})[dataKey] || null;
   }, [mode, period]);
@@ -289,8 +292,11 @@ export default function BacktestDashboard() {
   // ─── trades ────────────────────────────────────────────────────────────────
   var allTrades = useMemo(function() {
     if (mode === "m4") {
-      var th = M4_TRADES[period] || M4_TRADES.All || M4_TRADES["10D"];
-      return th !== undefined ? th : null;
+      // Same fallback chain as stats above — Mode 4 has one dataset that
+      // applies to every threshold window.
+      var th = M4_TRADES[period];
+      if (th === undefined || th === null) th = M4_TRADES["All"] || M4_TRADES["10D"] || null;
+      return th;
     }
     return (TRADES[period] || {})[mode] || [];
   }, [mode, period]);
@@ -331,21 +337,17 @@ export default function BacktestDashboard() {
 
         <div className="flex flex-wrap gap-0.5 bg-[#0d0f14] border border-[#252c3a] rounded-lg p-1">
           {[
-            { key: "m1", label: "Mode 1 \xB7 RSI" },
-            { key: "m2", label: "Mode 2 \xB7 Distance" },
-            { key: "m3", label: "Mode 3 \xB7 Contra" },
-            { key: "m4", label: "Mode 4 · 7-TF", featured: true },
+            { key: "m1", short: "M1", suffix: " \xB7 RSI" },
+            { key: "m2", short: "M2", suffix: " \xB7 Distance" },
+            { key: "m3", short: "M3", suffix: " \xB7 Contra" },
+            { key: "m4", short: "M4", suffix: " \xB7 7-TF" },
           ].map(function(item) {
-            var isActive = mode === item.key;
-            var cls = item.featured
-              ? (isActive
-                  ? "px-3 py-1.5 rounded-md text-xs font-semibold bg-[#f5c842]/15 text-[#f5c842] border border-[#f5c842]/60 transition-all cursor-pointer"
-                  : "px-3 py-1.5 rounded-md text-xs font-semibold text-[#f5c842]/80 hover:text-[#f5c842] hover:bg-[#f5c842]/10 transition-all cursor-pointer bg-transparent border border-[#f5c842]/30")
-              : pill(isActive);
             return (
-              <button key={item.key} className={cls}
+              <button key={item.key} className={pill(mode === item.key)}
                 onClick={function() { setMode(item.key); setFilter("all"); resetPage(); }}>
-                {item.featured ? "★ " : ""}{item.label}
+                {/* On mobile show "M1" etc; on >=sm show full "Mode 1 · RSI" */}
+                <span className="sm:hidden">{item.short}</span>
+                <span className="hidden sm:inline">{"Mode " + item.short.slice(1) + item.suffix}</span>
               </button>
             );
           })}
@@ -355,46 +357,28 @@ export default function BacktestDashboard() {
 
       {/* ── Stats grid ── */}
       {stats && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <div className="bg-[#111318] border border-[#252c3a] rounded-xl p-4">
-            <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Trades</p>
-            <p className="text-2xl font-bold font-mono text-white">{trades}</p>
-            <p className="text-xs text-gray-600 mt-1">{wins}W / {trades - wins}L</p>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
+          <div className="bg-[#111318] border border-[#252c3a] rounded-xl p-3 sm:p-4">
+            <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wider mb-1">Trades</p>
+            <p className="text-xl sm:text-2xl font-bold font-mono text-white">{trades}</p>
+            <p className="text-[10px] sm:text-xs text-gray-600 mt-1">{wins}W / {trades - wins}L</p>
           </div>
-          <div className="bg-[#111318] border border-[#252c3a] rounded-xl p-4">
-            <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Win Rate</p>
-            <p className={`text-2xl font-bold font-mono ${wr >= 90 ? "text-[#00d17a]" : wr >= 60 ? "text-[#f5c842]" : "text-[#ff4d6d]"}`}>
+          <div className="bg-[#111318] border border-[#252c3a] rounded-xl p-3 sm:p-4">
+            <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wider mb-1">Win Rate</p>
+            <p className={`text-xl sm:text-2xl font-bold font-mono ${wr >= 90 ? "text-[#00d17a]" : wr >= 60 ? "text-[#f5c842]" : "text-[#ff4d6d]"}`}>
               {Number(wr).toFixed(1)}%
             </p>
           </div>
-          <div className="bg-[#111318] border border-[#252c3a] rounded-xl p-4">
-            <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">{mode === "m3" ? "Paper P&L" : "P&L"}</p>
-            <p className={`text-2xl font-bold font-mono ${pnl >= 0 ? "text-[#00d17a]" : "text-[#ff4d6d]"}`}>
+          <div className="bg-[#111318] border border-[#252c3a] rounded-xl p-3 sm:p-4">
+            <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wider mb-1">{mode === "m3" ? "Paper P&L" : "P&L"}</p>
+            <p className={`text-xl sm:text-2xl font-bold font-mono ${pnl >= 0 ? "text-[#00d17a]" : "text-[#ff4d6d]"}`}>
               {pnl >= 0 ? "+" : ""}{Number(pnl).toFixed(2)}
             </p>
           </div>
-          <div className="bg-[#111318] border border-[#252c3a] rounded-xl p-4">
-            <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">{mode === "m3" ? "Paper Bank" : "End Bank"}</p>
-            <p className="text-2xl font-bold font-mono text-[#4f8ef7]">${Number(bank).toFixed(2)}</p>
+          <div className="bg-[#111318] border border-[#252c3a] rounded-xl p-3 sm:p-4">
+            <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wider mb-1">{mode === "m3" ? "Paper Bank" : "End Bank"}</p>
+            <p className="text-xl sm:text-2xl font-bold font-mono text-[#4f8ef7]">${Number(bank).toFixed(2)}</p>
           </div>
-        </div>
-      )}
-
-      {/* ── Mode 4 callout — the headline strategy ── */}
-      {mode === "m4" && stats && (
-        <div className="border-l-2 border-[#f5c842] bg-[#f5c842]/5 rounded-r-xl px-4 py-3 text-sm text-gray-300">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-[#f5c842] font-semibold">★ Mode 4 · 7-TF Confluence</span>
-            <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-[#f5c842]/15 text-[#f5c842] font-semibold">Headline strategy</span>
-          </div>
-          <p className="text-gray-400 leading-snug">
-            Enters during the 7–12 min window when 4+ of 7 timeframes (1m/3m/5m/15m/30m/1h/4h) agree on direction
-            and the contract mid is between 0.90 and 0.96. $5 flat per entry, one entry per contract.
-            <span className="text-[#f5c842] font-semibold"> {Number(stats.winRate ?? 0).toFixed(1)}% win rate</span> across
-            <span className="text-white font-semibold"> {stats.trades ?? 0} backtested trades</span> · turned
-            <span className="text-white font-semibold"> $50 → ${Number(stats.endBank ?? 0).toFixed(2)}</span>
-            (<span className="text-[#00d17a]">+{Number(stats.roi ?? 0).toFixed(1)}% ROI</span>).
-          </p>
         </div>
       )}
 
@@ -411,8 +395,8 @@ export default function BacktestDashboard() {
       )}
 
       {/* ── Bankroll chart ── */}
-      <div className="bg-[#111318] border border-[#252c3a] rounded-xl p-5">
-        <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+      <div className="bg-[#111318] border border-[#252c3a] rounded-xl p-3 sm:p-5">
+        <div className="flex items-center justify-between mb-3 sm:mb-4 flex-wrap gap-2">
           <h3 className="text-white font-semibold text-sm">Bankroll history</h3>
           <div className="flex gap-0.5 bg-[#0d0f14] border border-[#252c3a] rounded-lg p-1">
             {[
@@ -470,8 +454,8 @@ export default function BacktestDashboard() {
       </div>
 
       {/* ── Trade log ── */}
-      <div className="bg-[#111318] border border-[#252c3a] rounded-xl p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+      <div className="bg-[#111318] border border-[#252c3a] rounded-xl p-3 sm:p-5">
+        <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3 mb-3 sm:mb-4">
           <div className="flex items-center gap-2">
             <h3 className="text-white font-semibold text-sm">Trade log</h3>
             {filteredTrades && (
@@ -579,7 +563,7 @@ export default function BacktestDashboard() {
       </div>
 
       {/* ── Methodology note ── */}
-      <div className="bg-[#0a0b0d] border border-[#1e2330] rounded-xl px-5 py-4 text-xs text-gray-500 leading-relaxed">
+      <div className="bg-[#0a0b0d] border border-[#1e2330] rounded-xl px-3 sm:px-5 py-3 sm:py-4 text-[11px] sm:text-xs text-gray-500 leading-relaxed">
         <strong className="text-gray-300 font-semibold">Backtest methodology \xB7 </strong>
         Starting bank $50 per mode \xB7 M1/M2 use Kelly-sized step bets \xB7 M3 $1 flat \xB7 M4 $5 flat (7-TF, 0.90 mid, 4/7 TFs, 7–12 min window) \xB7
         Strike = exact BTC opening price of each 15-min window (no rounding) \xB7
